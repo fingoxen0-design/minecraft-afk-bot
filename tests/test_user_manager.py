@@ -26,6 +26,11 @@ class TestUserManager(unittest.TestCase):
         can_use, msg = self.manager.can_use_bot(admin_id)
         self.assertTrue(can_use)
         self.assertIn("Admin", msg)
+        # Admin default mc config should match Gotto, bunyod, allaysmp.pro, economy
+        self.assertEqual(user["mc_config"]["username"], config.DEFAULT_MC_USERNAME)
+        self.assertEqual(user["mc_config"]["password"], config.DEFAULT_MC_PASSWORD)
+        self.assertEqual(user["mc_config"]["host"], config.DEFAULT_MC_HOST)
+        self.assertEqual(user["mc_config"]["subserver"], config.DEFAULT_MC_SUBSERVER)
 
     def test_regular_user_trial(self):
         user_id = "9988776655"
