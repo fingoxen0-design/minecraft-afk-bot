@@ -64,10 +64,13 @@ TRIAL_DURATION_HOURS = _get_float("TRIAL_DURATION_HOURS", 24.0)
 MAX_ACTIVE_BOTS = _get_int("MAX_ACTIVE_BOTS", 2)
 
 # Minecraft AFK Bot sozlamalari
-DEFAULT_MC_HOST = os.getenv("DEFAULT_MC_HOST", "127.0.0.1")
+DEFAULT_MC_HOST = os.getenv("DEFAULT_MC_HOST", "allaysmp.pro")
 DEFAULT_MC_PORT = _get_int("DEFAULT_MC_PORT", 25565)
-DEFAULT_MC_VERSION = os.getenv("DEFAULT_MC_VERSION", "")
+DEFAULT_MC_VERSION = os.getenv("DEFAULT_MC_VERSION", "1.21.1")
 DEFAULT_MC_SUBSERVER = os.getenv("DEFAULT_MC_SUBSERVER", "economy")
+DEFAULT_MC_USERNAME = os.getenv("DEFAULT_MC_USERNAME", "Gotto")
+DEFAULT_MC_PASSWORD = os.getenv("DEFAULT_MC_PASSWORD", "bunyod")
+AUTO_AFK_ON_BOOT = os.getenv("AUTO_AFK_ON_BOOT", "true").lower() in ("true", "1", "yes")
 
 # Ovoz berish sozlamalari
 DEFAULT_VOTE_URL = os.getenv(

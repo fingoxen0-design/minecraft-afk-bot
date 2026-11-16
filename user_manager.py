@@ -55,6 +55,9 @@ class UserManager:
             trial_duration_sec = config.TRIAL_DURATION_HOURS * 3600
             expires_at = None if role == "admin" else (now + trial_duration_sec)
 
+            default_username = config.DEFAULT_MC_USERNAME if role == "admin" else f"Player_{cid[-4:]}"
+            default_password = config.DEFAULT_MC_PASSWORD if role == "admin" else ""
+
             self.users[cid] = {
                 "chat_id": cid,
                 "username": username,
@@ -64,8 +67,8 @@ class UserManager:
                 "trial_start": now,
                 "expires_at": expires_at,
                 "mc_config": {
-                    "username": f"Player_{cid[-4:]}",
-                    "password": "",
+                    "username": default_username,
+                    "password": default_password,
                     "host": config.DEFAULT_MC_HOST,
                     "port": config.DEFAULT_MC_PORT,
                     "version": config.DEFAULT_MC_VERSION,
@@ -81,9 +84,19 @@ class UserManager:
             if first_name and user.get("first_name") != first_name:
                 user["first_name"] = first_name
             # Admin ro'yxatida bo'lsa rolni admin qilish
-            if self.is_admin(cid) and user.get("role") != "admin":
-                user["role"] = "admin"
-                user["expires_at"] = None
+            if self.is_admin(cid):
+                if user.get("role") != "admin":
+                    user["role"] = "admin"
+                    user["expires_at"] = None
+                mc_conf = user.setdefault("mc_config", {})
+                if not mc_conf.get("username") or mc_conf.get("username").startswith("Player_"):
+                    mc_conf["username"] = config.DEFAULT_MC_USERNAME
+                if not mc_conf.get("password"):
+                    mc_conf["password"] = config.DEFAULT_MC_PASSWORD
+                if not mc_conf.get("host") or mc_conf.get("host") == "127.0.0.1":
+                    mc_conf["host"] = config.DEFAULT_MC_HOST
+                if not mc_conf.get("subserver"):
+                    mc_conf["subserver"] = config.DEFAULT_MC_SUBSERVER
                 self.save()
 
         return self.users[cid]

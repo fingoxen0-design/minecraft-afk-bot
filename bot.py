@@ -599,6 +599,16 @@ class MinecraftVoteBot:
                                 "Davom ettirish uchun obuna sotib oling.",
                                 chat_id=uid
                             )
+
+                # 3. Adminlar uchun 24/7 avtomatik qayta tiklash (Auto-AFK watchdog)
+                if getattr(config, "AUTO_AFK_ON_BOOT", True):
+                    for admin_id in config.ADMIN_USER_IDS:
+                        status = self.afk_manager.get_user_status(admin_id)
+                        if not status or status.get("status") in ["stopped", "error"]:
+                            mc_conf = self.user_manager.get_mc_config(admin_id)
+                            if mc_conf and mc_conf.get("username"):
+                                print(f"[Scheduler] Admin {admin_id} AFK botini avtomatik qayta tiklamoqda...")
+                                self.afk_manager.start_user_bot(admin_id, mc_conf)
             except Exception as e:
                 print(f"[Scheduler] Xatolik: {e}")
             time.sleep(20)
@@ -637,6 +647,18 @@ class MinecraftVoteBot:
         # 2. Scheduler fon oqimini yoqish
         scheduler_thread = threading.Thread(target=self.scheduler_loop, daemon=True)
         scheduler_thread.start()
+
+        # 2.1. Adminlar uchun AFK botni avtomatik ishga tushirish (24/7 doimiy rejim)
+        if getattr(config, "AUTO_AFK_ON_BOOT", True):
+            for admin_id in config.ADMIN_USER_IDS:
+                try:
+                    self.user_manager.get_or_create_user(admin_id)
+                    mc_conf = self.user_manager.get_mc_config(admin_id)
+                    if mc_conf.get("username"):
+                        ok, res = self.afk_manager.start_user_bot(admin_id, mc_conf)
+                        print(f"[AutoAFK] Admin {admin_id} ({mc_conf.get('username')}) uchun AFK bot ishga tushirildi: {ok} ({res})")
+                except Exception as e:
+                    print(f"[AutoAFK] Admin AFK botini ishga tushirishda ogohlantirish: {e}")
 
         # 3. Telegram polling va buyruqlar menyusini sozlash
         if config.TELEGRAM_BOT_TOKEN:
