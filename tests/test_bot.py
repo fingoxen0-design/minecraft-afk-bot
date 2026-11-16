@@ -16,11 +16,13 @@ class TestBot(unittest.TestCase):
         self.config_chat_patch = patch.object(config, "TELEGRAM_CHAT_ID", "123456789")
         self.config_url_patch = patch.object(config, "DEFAULT_VOTE_URL", "https://minecraft-mp.com/server/350645/vote/?ref=bot&tracker=1")
         self.config_port_patch = patch.object(config, "HEALTH_PORT", 0)
+        self.config_admins_patch = patch.object(config, "ADMIN_USER_IDS", {"123456789"})
 
         self.config_token_patch.start()
         self.config_chat_patch.start()
         self.config_url_patch.start()
         self.config_port_patch.start()
+        self.config_admins_patch.start()
 
         self.bot = MinecraftVoteBot()
         self.bot.tracker.state_file = self.bot.tracker.state_file.with_name(self.test_state_file)
@@ -34,6 +36,7 @@ class TestBot(unittest.TestCase):
         self.config_chat_patch.stop()
         self.config_url_patch.stop()
         self.config_port_patch.stop()
+        self.config_admins_patch.stop()
         if os.path.exists(self.test_state_file):
             os.remove(self.test_state_file)
 
@@ -215,6 +218,54 @@ class TestBot(unittest.TestCase):
         self.bot.handle_message("unauthorized_user", f"/seturl {new_url}")
         last_msg = self.bot.client.send_message.call_args[0][0]
         self.assertIn("Ruxsat berilmagan", last_msg)
+
+    def test_say_and_cmd_commands(self):
+        # When bot not running
+        self.bot.handle_message("123456789", "/say Salom")
+        last_msg = self.bot.client.send_message.call_args[0][0]
+        self.assertIn("faol emas", last_msg)
+
+        # Empty say
+        self.bot.handle_message("123456789", "/say")
+        last_msg = self.bot.client.send_message.call_args[0][0]
+        self.assertIn("Masalan", last_msg)
+
+        # Cmd empty
+        self.bot.handle_message("123456789", "/cmd")
+        last_msg = self.bot.client.send_message.call_args[0][0]
+        self.assertIn("Masalan", last_msg)
+
+    def test_ping_command(self):
+        self.bot.handle_message("123456789", "/ping")
+        last_msg = self.bot.client.send_message.call_args[0][0]
+        self.assertIn("Pong", last_msg)
+
+    def test_admin_stats_ban_unban(self):
+        # /stats
+        self.bot.handle_message("123456789", "/stats")
+        last_msg = self.bot.client.send_message.call_args[0][0]
+        self.assertIn("Statistikasi", last_msg)
+
+        # /ban
+        self.bot.handle_message("123456789", "/ban 998811")
+        last_msg = self.bot.client.send_message.call_args[0][0]
+        self.assertIn("bloklandi", last_msg)
+
+        # /unban
+        self.bot.handle_message("123456789", "/unban 998811")
+        last_msg = self.bot.client.send_message.call_args[0][0]
+        self.assertIn("chiqarildi", last_msg)
+
+    def test_chat_help_callback(self):
+        query = {
+            "id": "q1",
+            "data": "chat_help",
+            "message": {"chat": {"id": "123456789"}}
+        }
+        self.bot.handle_callback_query(query)
+        self.bot.client.answer_callback_query.assert_called_with("q1", text="O'yinga xabar yozish")
+        last_msg = self.bot.client.send_message.call_args[0][0]
+        self.assertIn("/say", last_msg)
 
     def test_stop(self):
         self.bot.is_running = True

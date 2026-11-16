@@ -64,6 +64,10 @@ class MinecraftVoteBot:
             ],
             [
                 {"text": "📊 AFK Holati", "callback_data": "afk_status"},
+                {"text": "💬 O'yinga Yozish", "callback_data": "chat_help"}
+            ],
+            [
+                {"text": "📜 Veb Loglar", "url": "https://minecraft-afk-bot-y7ak.onrender.com/logs"},
                 {"text": "⚙️ Sozlamalar", "callback_data": "bot_settings"}
             ]
         ]
@@ -153,6 +157,9 @@ class MinecraftVoteBot:
                 "📋 <b>Mavjud Buyruqlar:</b>\n"
                 "• /logs — Jonli veb-terminal havolasini olish (Oxirgi 2 soatlik loglar)\n"
                 "• /settings — Barcha bot sozlamalari va ma'lumotlarini ko'rish\n"
+                "• /say [xabar] — Minecraft o'yin chatiga xabar yozish\n"
+                "• /cmd [buyruq] — Minecraft serveriga buyruq yuborish (masalan: /cmd /spawn)\n"
+                "• /ping — Bot va server holatini tekshirish\n"
                 "• /seturl [havola] — Ovoz berish sayti havolasini o'zgartirish\n"
                 "• /setcooldown [soat] — Taymer oraliq vaqtini o'zgartirish (masalan: 15)\n"
                 "• /afk_start — AFK botni ishga tushirish\n"
@@ -202,12 +209,18 @@ class MinecraftVoteBot:
             else:
                 afk_icon = "🟢 Faol" if info.get("is_afk") else "🟡 Kutilmoqda / Ulanmoqda"
                 logs_text = "\n".join(info.get("recent_logs", [])) or "Hozircha xabarlar yo'q."
+                h_val = info.get("health")
+                f_val = info.get("food")
+                h_str = f"<b>{h_val:.0f}/20</b> ❤️" if h_val is not None else "Aniqlanmoqda..."
+                f_str = f"<b>{f_val:.0f}/20</b> 🍗" if f_val is not None else "Aniqlanmoqda..."
                 msg = (
                     "📊 <b>AFK Bot Holati:</b>\n\n"
                     f"• Bot niki: <code>{info.get('username')}</code>\n"
                     f"• Holat: <b>{info.get('status')}</b>\n"
                     f"• Server: <b>{info.get('server')}</b>\n"
                     f"• AFK rejimi: <b>{afk_icon}</b>\n"
+                    f"• Jon (Health): {h_str}\n"
+                    f"• To'qlik (Food): {f_str}\n"
                     f"• Ish vaqti (uptime): <b>{info.get('uptime_text')}</b>\n\n"
                     f"📝 <b>Oxirgi voqealar:</b>\n<code>{logs_text}</code>"
                 )
@@ -269,6 +282,37 @@ class MinecraftVoteBot:
                 ]
             }
             self.client.send_message(msg, chat_id=chat_id, reply_markup=keyboard)
+
+        elif text.startswith("/say"):
+            parts = text.split(maxsplit=1)
+            if len(parts) > 1:
+                msg_to_send = parts[1].strip()
+                ok, res = self.afk_manager.send_user_chat(chat_id, msg_to_send)
+                self.client.send_message(f"{'✅' if ok else '❌'} {res}", chat_id=chat_id)
+            else:
+                self.client.send_message("❌ Masalan: <code>/say Salom barchaga!</code> ko'rinishida yuboring.", chat_id=chat_id)
+
+        elif text.startswith("/cmd"):
+            parts = text.split(maxsplit=1)
+            if len(parts) > 1:
+                cmd_to_send = parts[1].strip()
+                if not cmd_to_send.startswith("/"):
+                    cmd_to_send = f"/{cmd_to_send}"
+                ok, res = self.afk_manager.send_user_chat(chat_id, cmd_to_send)
+                self.client.send_message(f"{'✅' if ok else '❌'} {res}", chat_id=chat_id)
+            else:
+                self.client.send_message("❌ Masalan: <code>/cmd /spawn</code> yoki <code>/cmd /balance</code> ko'rinishida yuboring.", chat_id=chat_id)
+
+        elif text.startswith("/ping"):
+            summary = self.tracker.get_summary()
+            self.client.send_message(
+                "🏓 <b>Pong!</b> Bot serverda 24/7 faol ishlamoqda.\n\n"
+                f"• Server holati: 🟢 <b>A'lo</b>\n"
+                f"• Taymer: <b>{summary['remaining_text']}</b>\n"
+                f"• Jonli veb-terminal: <a href=\"https://minecraft-afk-bot-y7ak.onrender.com/logs\">Ko'rish</a>",
+                chat_id=chat_id,
+                reply_markup=self.get_main_keyboard(chat_id)
+            )
 
         elif text.startswith("/seturl") or text.startswith("/setvoteurl"):
             if not self.is_authorized(chat_id):
@@ -361,10 +405,53 @@ class MinecraftVoteBot:
                 f"• Jami foydalanuvchilar: <b>{len(users)} ta</b>\n"
                 f"• Hozirda faol AFK botlar: <b>{active_bots} / {config.MAX_ACTIVE_BOTS} ta</b>\n\n"
                 "<b>Mavjud buyruqlar:</b>\n"
+                "• <code>/stats</code> — Tizim va obuna to'liq statistikasi\n"
                 "• <code>/grant [chat_id] [kunlar]</code> — Premium obuna berish\n"
+                "• <code>/ban [chat_id]</code> — Foydalanuvchini bloklash\n"
+                "• <code>/unban [chat_id]</code> — Blokdan chiqarish\n"
                 "• <code>/users</code> — Foydalanuvchilar ro'yxatini ko'rish"
             )
             self.client.send_message(msg, chat_id=chat_id)
+
+        elif text.startswith("/stats"):
+            if not is_admin:
+                return
+            st = self.user_manager.get_stats()
+            active_bots = self.afk_manager.get_active_count()
+            msg = (
+                "📈 <b>Tizim Foydalanuvchilari Statistikasi:</b>\n\n"
+                f"👥 Jami ro'yxatdan o'tganlar: <b>{st['total']} ta</b>\n"
+                f"👑 Adminlar: <b>{st['admin']} ta</b>\n"
+                f"⭐ Premium foydalanuvchilar: <b>{st['premium']} ta</b>\n"
+                f"⏳ Sinov (Trial) foydalanuvchilari: <b>{st['trial']} ta</b>\n"
+                f"⚠️ Obunasi tugaganlar: <b>{st['expired']} ta</b>\n"
+                f"🚫 Bloklanganlar: <b>{st['banned']} ta</b>\n\n"
+                f"🎮 Hozirda faol AFK botlar: <b>{active_bots} / {config.MAX_ACTIVE_BOTS} ta</b>"
+            )
+            self.client.send_message(msg, chat_id=chat_id)
+
+        elif text.startswith("/ban"):
+            if not is_admin:
+                return
+            parts = text.split()
+            if len(parts) > 1:
+                target_id = parts[1].strip()
+                ok, res_msg = self.user_manager.ban_user(target_id)
+                self.afk_manager.stop_user_bot(target_id)
+                self.client.send_message(res_msg, chat_id=chat_id)
+            else:
+                self.client.send_message("❌ Masalan: <code>/ban 123456789</code>", chat_id=chat_id)
+
+        elif text.startswith("/unban"):
+            if not is_admin:
+                return
+            parts = text.split()
+            if len(parts) > 1:
+                target_id = parts[1].strip()
+                ok, res_msg = self.user_manager.unban_user(target_id)
+                self.client.send_message(res_msg, chat_id=chat_id)
+            else:
+                self.client.send_message("❌ Masalan: <code>/unban 123456789</code>", chat_id=chat_id)
 
         elif text.startswith("/grant"):
             if not is_admin:
@@ -442,6 +529,18 @@ class MinecraftVoteBot:
             self.client.answer_callback_query(query_id, text="Sozlamalar")
             self.handle_message(chat_id, "/settings")
 
+        elif data == "chat_help":
+            self.client.answer_callback_query(query_id, text="O'yinga xabar yozish")
+            msg = (
+                "💬 <b>Minecraft o'yiniga Telegramdan xabar yozish:</b>\n\n"
+                "• <b>Oddiy chat xabari:</b>\n"
+                "<code>/say Salom barchaga!</code>\n\n"
+                "• <b>O'yin buyrug'i:</b>\n"
+                "<code>/cmd /spawn</code> yoki <code>/cmd /balance</code>\n\n"
+                "<i>(Buning uchun AFK botingiz /afk_start orqali serverda bo'lishi kerak)</i>"
+            )
+            self.client.send_message(msg, chat_id=chat_id, reply_markup=self.get_main_keyboard(chat_id))
+
         elif data == "admin_panel":
             self.client.answer_callback_query(query_id, text="Admin panel")
             self.handle_message(chat_id, "/admin")
@@ -513,8 +612,25 @@ class MinecraftVoteBot:
         scheduler_thread = threading.Thread(target=self.scheduler_loop, daemon=True)
         scheduler_thread.start()
 
-        # 3. Telegram polling
+        # 3. Telegram polling va buyruqlar menyusini sozlash
         if config.TELEGRAM_BOT_TOKEN:
+            try:
+                commands = [
+                    {"command": "start", "description": "Asosiy menyu va hisob holati"},
+                    {"command": "status", "description": "Ovoz berish taymeri va eslatma"},
+                    {"command": "voted", "description": "Ovoz berilganini tasdiqlash"},
+                    {"command": "afk_start", "description": "Minecraft AFK botni yoqish"},
+                    {"command": "afk_stop", "description": "AFK botni to'xtatish"},
+                    {"command": "afk_status", "description": "AFK bot holati va loglar"},
+                    {"command": "say", "description": "Minecraft o'yinga xabar yozish"},
+                    {"command": "cmd", "description": "Minecraft o'yinga buyruq yuborish"},
+                    {"command": "logs", "description": "Jonli veb-terminal havolasi"},
+                    {"command": "settings", "description": "Barcha sozlamalar boshqaruvi"},
+                    {"command": "ping", "description": "Bot holatini tekshirish"}
+                ]
+                self.client.set_my_commands(commands)
+            except Exception as e:
+                print(f"[Bot] Menyuni sozlashda ogohlantirish: {e}")
             self.polling_loop()
         else:
             print("[Warning] TELEGRAM_BOT_TOKEN kiritilmagan. Bot faqat Health Server rejimida ishlaydi.")

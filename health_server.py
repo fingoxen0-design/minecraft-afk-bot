@@ -82,45 +82,58 @@ LOGS_HTML = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Bot — Jonli Veb Loglar</title>
+    <title>Minecraft Bot — Veb Dashboard & Jonli Terminal</title>
     <style>
+        :root {
+            --bg: #0d1117;
+            --header-bg: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --green: #3fb950;
+            --yellow: #d29922;
+            --purple: #bc8cff;
+            --red: #f85149;
+            --card-bg: #161b22;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            background-color: #0b0f19;
-            color: #c9d1d9;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             display: flex;
             flex-direction: column;
             height: 100vh;
             overflow: hidden;
         }
         header {
-            background: #161b22;
-            border-bottom: 1px solid #30363d;
-            padding: 12px 20px;
+            background: var(--header-bg);
+            border-bottom: 1px solid var(--border);
+            padding: 10px 18px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
             gap: 10px;
         }
-        .header-left {
+        .brand {
             display: flex;
             align-items: center;
             gap: 12px;
         }
-        .header-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: #58a6ff;
+        .title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--accent);
             display: flex;
             align-items: center;
             gap: 8px;
         }
         .live-badge {
-            background: rgba(46, 160, 67, 0.2);
-            color: #3fb950;
-            border: 1px solid #238636;
+            background: rgba(46, 160, 67, 0.15);
+            color: var(--green);
+            border: 1px solid rgba(46, 160, 67, 0.4);
             font-size: 11px;
             font-weight: 600;
             padding: 2px 8px;
@@ -132,7 +145,7 @@ LOGS_HTML = """<!DOCTYPE html>
         .live-dot {
             width: 7px;
             height: 7px;
-            background: #3fb950;
+            background: var(--green);
             border-radius: 50%;
             animation: pulse 1.5s infinite;
         }
@@ -141,48 +154,125 @@ LOGS_HTML = """<!DOCTYPE html>
             50% { opacity: 0.4; transform: scale(0.85); }
             100% { opacity: 1; transform: scale(1); }
         }
-        .header-meta {
-            font-size: 12px;
-            color: #8b949e;
-        }
-        .header-actions {
+        .tabs {
             display: flex;
+            gap: 4px;
+            background: #0b0f19;
+            padding: 3px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        .tab-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover { color: #fff; }
+        .tab-btn.active {
+            background: #21262d;
+            color: var(--accent);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        .toolbar {
+            background: #121820;
+            border-bottom: 1px solid var(--border);
+            padding: 8px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
             gap: 8px;
+        }
+        .filters {
+            display: flex;
+            gap: 6px;
             align-items: center;
             flex-wrap: wrap;
         }
-        button {
+        .chip {
             background: #21262d;
-            color: #c9d1d9;
-            border: 1px solid #30363d;
-            padding: 6px 12px;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 14px;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.15s;
+        }
+        .chip:hover, .chip.active {
+            background: rgba(88, 166, 255, 0.15);
+            border-color: var(--accent);
+            color: var(--accent);
+            font-weight: 600;
+        }
+        .search-box {
+            background: #0d1117;
+            border: 1px solid var(--border);
+            color: #fff;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            outline: none;
+            width: 170px;
+            transition: border-color 0.2s;
+        }
+        .search-box:focus { border-color: var(--accent); }
+        .actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        button.tool-btn {
+            background: #21262d;
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 5px 11px;
             border-radius: 6px;
             font-size: 12px;
             cursor: pointer;
-            transition: all 0.2s;
             display: flex;
             align-items: center;
             gap: 5px;
+            transition: all 0.15s;
             user-select: none;
         }
-        button:hover {
+        button.tool-btn:hover {
             background: #30363d;
-            border-color: #8b949e;
+            border-color: var(--text-muted);
         }
-        button:active { transform: translateY(1px); }
-        .btn-active {
-            background: #1f6feb !important;
-            color: #fff !important;
-            border-color: #388bfd !important;
+        button.tool-btn:active { transform: translateY(1px); }
+        .btn-toggle-on {
+            background: rgba(31, 111, 235, 0.2) !important;
+            border-color: var(--accent) !important;
+            color: var(--accent) !important;
         }
-        #terminal {
+        main {
             flex: 1;
-            padding: 16px 20px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .view {
+            display: none;
+            height: 100%;
             overflow-y: auto;
+        }
+        .view.active { display: block; }
+        #terminal-view {
+            background: #090d13;
+            padding: 14px 18px;
             font-family: "Cascadia Code", "Fira Code", Consolas, "Courier New", monospace;
-            font-size: 13px;
+            font-size: 12.5px;
             line-height: 1.6;
-            background: #0d1117;
             white-space: pre-wrap;
             word-break: break-all;
         }
@@ -190,19 +280,81 @@ LOGS_HTML = """<!DOCTYPE html>
             padding: 2px 0;
             border-bottom: 1px solid rgba(255,255,255,0.02);
         }
-        .log-time { color: #8b949e; margin-right: 8px; user-select: none; }
-        .log-system { color: #3fb950; }
-        .log-mineflayer { color: #58a6ff; font-weight: 500; }
-        .log-keepalive { color: #d29922; }
-        .log-telegram { color: #bc8cff; }
-        .log-error { color: #f85149; font-weight: 600; }
+        .log-time { color: var(--text-muted); margin-right: 8px; user-select: none; font-size: 11px; }
+        .log-system { color: var(--green); }
+        .log-mineflayer { color: var(--accent); font-weight: 500; }
+        .log-keepalive { color: var(--yellow); }
+        .log-telegram { color: var(--purple); }
+        .log-error { color: var(--red); font-weight: 600; }
         .log-default { color: #e6edf3; }
+        #dash-view {
+            padding: 24px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+            background: var(--bg);
+        }
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .card-header {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .stat-val {
+            font-size: 22px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 6px;
+        }
+        .stat-desc { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+        #help-view {
+            padding: 24px;
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 14px;
+            font-size: 13px;
+            background: var(--card-bg);
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+        th, td {
+            text-align: left;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+        }
+        th { background: #161b22; color: var(--accent); font-weight: 600; }
+        tr:hover { background: rgba(255,255,255,0.02); }
+        code {
+            background: rgba(110,118,129,0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #79c0ff;
+            font-family: monospace;
+        }
         footer {
-            background: #161b22;
-            border-top: 1px solid #30363d;
-            padding: 8px 20px;
+            background: var(--header-bg);
+            border-top: 1px solid var(--border);
+            padding: 7px 18px;
             font-size: 11px;
-            color: #8b949e;
+            color: var(--text-muted);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -211,58 +363,230 @@ LOGS_HTML = """<!DOCTYPE html>
 </head>
 <body>
     <header>
-        <div class="header-left">
-            <div class="header-title">🎮 Minecraft Bot Terminal</div>
+        <div class="brand">
+            <div class="title">🎮 Minecraft Vote & AFK Bot</div>
             <div class="live-badge"><span class="live-dot"></span> JONLI</div>
-            <span class="header-meta">⏱ Qora quti: Oxirgi 2 soat</span>
         </div>
-        <div class="header-actions">
-            <button id="btn-copy" onclick="copyLogs()">📋 Nusxa olish</button>
-            <button id="btn-clear" onclick="clearScreen()">🧹 Tozalash</button>
-            <button id="btn-autoscroll" class="btn-active" onclick="toggleAutoScroll()">⬇️ Avto-skroll: ON</button>
-            <button id="btn-refresh" onclick="fetchLogs()">🔄 Yangilash</button>
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('terminal')">📜 Terminal</button>
+            <button class="tab-btn" onclick="switchTab('dashboard')">📊 Tizim & Monitor</button>
+            <button class="tab-btn" onclick="switchTab('help')">📱 Buyruqlar</button>
         </div>
     </header>
-    <div id="terminal"><div class="log-line log-system">Yuklanmoqda...</div></div>
+
+    <div id="terminal-toolbar" class="toolbar">
+        <div class="filters">
+            <span class="chip active" onclick="setFilter('all', this)">Barchasi</span>
+            <span class="chip" onclick="setFilter('mineflayer', this)">Mineflayer 🎮</span>
+            <span class="chip" onclick="setFilter('telegram', this)">Telegram 💬</span>
+            <span class="chip" onclick="setFilter('keepalive', this)">KeepAlive ⚡️</span>
+            <span class="chip" onclick="setFilter('error', this)">Xatolar ⚠️</span>
+            <input type="text" id="log-search" class="search-box" placeholder="🔎 Qidiruv..." oninput="handleSearch(this.value)">
+        </div>
+        <div class="actions">
+            <button class="tool-btn" onclick="downloadLogs()">💾 .txt Yuklash</button>
+            <button class="tool-btn" onclick="copyLogs()">📋 Nusxa olish</button>
+            <button class="tool-btn" onclick="clearScreen()">🧹 Tozalash</button>
+            <button id="btn-autoscroll" class="tool-btn btn-toggle-on" onclick="toggleAutoScroll()">⬇️ Avto-skroll: ON</button>
+            <button class="tool-btn" onclick="fetchLogs()">🔄</button>
+        </div>
+    </div>
+
+    <main>
+        <!-- 1. Terminal View -->
+        <div id="view-terminal" class="view active">
+            <div id="terminal-view"><div class="log-line log-system">Loglar yuklanmoqda...</div></div>
+        </div>
+
+        <!-- 2. Dashboard View -->
+        <div id="view-dashboard" class="view">
+            <div id="dash-view">
+                <div class="card">
+                    <div class="card-header">Server Holati 🟢</div>
+                    <div id="stat-server-status" class="stat-val">A'lo (Healthy)</div>
+                    <div id="stat-server-uptime" class="stat-desc">Ish vaqti: ...</div>
+                </div>
+                <div class="card">
+                    <div class="card-header">Ovoz Berish Taymeri 🗳</div>
+                    <div id="stat-vote-status" class="stat-val">Yuklanmoqda...</div>
+                    <div id="stat-vote-rem" class="stat-desc">Qolgan vaqt: ...</div>
+                </div>
+                <div class="card">
+                    <div class="card-header">Faol AFK Botlar 🎮</div>
+                    <div id="stat-afk-count" class="stat-val">0 / 2</div>
+                    <div class="stat-desc">Mineflayer dvigateli 24/7 tayyor</div>
+                </div>
+                <div class="card">
+                    <div class="card-header">Anti-Sleep (KeepAlive) ⚡️</div>
+                    <div class="stat-val" style="color: var(--yellow);">Faol (10 daqiqa)</div>
+                    <div class="stat-desc">Render uyqusini oldini oluvchi ikkita mustaqil zanjir (Ichki + GitHub Actions)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Help View -->
+        <div id="view-help" class="view">
+            <div id="help-view">
+                <h3 style="margin-bottom: 8px; color: var(--accent);">📱 Telegram Bot Buyruqlari Qo'llanmasi</h3>
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">Telegram botingizga yuborishingiz mumkin bo'lgan barcha boshqaruv buyruqlari:</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Buyruq</th>
+                            <th>Tavsif</th>
+                            <th>Misol</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>/start</code></td>
+                            <td>Asosiy interaktiv menyu va hisob holati</td>
+                            <td><code>/start</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>/afk_start</code></td>
+                            <td>Minecraft AFK botni serverga kiritish va /afk qilish</td>
+                            <td><code>/afk_start</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>/afk_stop</code></td>
+                            <td>AFK botni serverdan chiqarish</td>
+                            <td><code>/afk_stop</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>/afk_status</code></td>
+                            <td>Bot jonli holati, jon/ovqat darajasi va oxirgi loglari</td>
+                            <td><code>/afk_status</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>/say [matn]</code></td>
+                            <td>Minecraft o'yin chatiga Telegramdan xabar yozish</td>
+                            <td><code>/say Salom barchaga!</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>/cmd [buyruq]</code></td>
+                            <td>Minecraft serveriga buyruq yuborish</td>
+                            <td><code>/cmd /spawn</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>/logs</code></td>
+                            <td>Jonli veb-terminal va qora quti havolasini olish</td>
+                            <td><code>/logs</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>/settings</code></td>
+                            <td>Barcha sozlamalarni ko'rish va o'zgartirish</td>
+                            <td><code>/settings</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>/seturl [url]</code></td>
+                            <td>Ovoz berish sayti havolasini o'zgartirish</td>
+                            <td><code>/seturl https://sayt.com/vote</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>/setcooldown [h]</code></td>
+                            <td>Taymer oraliq vaqtini belgilash (soatda)</td>
+                            <td><code>/setcooldown 15</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>/setserver [ip]</code></td>
+                            <td>Minecraft server IP, Port va Subserverini sozlash</td>
+                            <td><code>/setserver mc.uz 25565 economy</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>/ping</code></td>
+                            <td>Bot va server tezligini tekshirish</td>
+                            <td><code>/ping</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
     <footer>
-        <span id="footer-count">Qatorlar: 0 ta</span>
+        <span id="footer-count">Ko'rsatilmoqda: 0 / Jami: 0 ta qator (Oxirgi 2 soat)</span>
         <span id="footer-uptime">Server ish vaqti: ...</span>
     </footer>
+
     <script>
         let autoScroll = true;
-        let lastLogsLength = -1;
+        let currentFilter = 'all';
+        let searchQuery = '';
+        let allLogs = [];
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            
+            const toolbar = document.getElementById('terminal-toolbar');
+            if (tabId === 'terminal') {
+                toolbar.style.display = 'flex';
+                document.getElementById('view-terminal').classList.add('active');
+                event.target.classList.add('active');
+            } else if (tabId === 'dashboard') {
+                toolbar.style.display = 'none';
+                document.getElementById('view-dashboard').classList.add('active');
+                event.target.classList.add('active');
+            } else if (tabId === 'help') {
+                toolbar.style.display = 'none';
+                document.getElementById('view-help').classList.add('active');
+                event.target.classList.add('active');
+            }
+        }
+
+        function setFilter(type, el) {
+            currentFilter = type;
+            document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+            el.classList.add('active');
+            renderLogs();
+        }
+
+        function handleSearch(q) {
+            searchQuery = q.toLowerCase();
+            renderLogs();
+        }
 
         function toggleAutoScroll() {
             autoScroll = !autoScroll;
             const btn = document.getElementById("btn-autoscroll");
             if (autoScroll) {
-                btn.className = "btn-active";
+                btn.className = "tool-btn btn-toggle-on";
                 btn.innerText = "⬇️ Avto-skroll: ON";
                 scrollToBottom();
             } else {
-                btn.className = "";
+                btn.className = "tool-btn";
                 btn.innerText = "⬇️ Avto-skroll: OFF";
             }
         }
 
         function scrollToBottom() {
-            const term = document.getElementById("terminal");
-            term.scrollTop = term.scrollHeight;
+            const v = document.getElementById("view-terminal");
+            v.scrollTop = v.scrollHeight;
         }
 
         function clearScreen() {
-            document.getElementById("terminal").innerHTML = '<div class="log-line log-system">[Ekranni tozalash bajarildi] Yangi loglar kelganda ko\'rinadi...</div>';
-            lastLogsLength = -1;
+            document.getElementById("terminal-view").innerHTML = '<div class="log-line log-system">[Ekranni tozalash bajarildi] Yangi loglar kelganda ko\\'rinadi...</div>';
         }
 
         function copyLogs() {
-            const text = document.getElementById("terminal").innerText;
+            const text = document.getElementById("terminal-view").innerText;
             navigator.clipboard.writeText(text).then(() => {
-                const btn = document.getElementById("btn-copy");
-                const old = btn.innerText;
-                btn.innerText = "✅ Nusxalandi!";
-                setTimeout(() => btn.innerText = old, 1500);
+                alert("Loglar buferga nusxalandi!");
             });
+        }
+
+        function downloadLogs() {
+            const lines = allLogs.map(l => `[${l.time}] ${l.message}`).join("\\n");
+            const blob = new Blob([lines], { type: "text/plain;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `minecraft_bot_logs_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         function colorize(msg) {
@@ -278,26 +602,57 @@ LOGS_HTML = """<!DOCTYPE html>
             return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         }
 
+        function renderLogs() {
+            const term = document.getElementById("terminal-view");
+            if (!allLogs || allLogs.length === 0) {
+                term.innerHTML = '<div class="log-line log-system">Loglar mavjud emas yoki hali yozilmadi.</div>';
+                document.getElementById("footer-count").innerText = "Ko'rsatilmoqda: 0 / Jami: 0 ta qator (Oxirgi 2 soat)";
+                return;
+            }
+
+            const filtered = allLogs.filter(l => {
+                const msg = l.message;
+                if (currentFilter === 'mineflayer' && !msg.includes('[Mineflayer]')) return false;
+                if (currentFilter === 'telegram' && !msg.includes('[Telegram') && !msg.includes('[Bot]')) return false;
+                if (currentFilter === 'keepalive' && !msg.includes('[KeepAlive]')) return false;
+                if (currentFilter === 'error' && !msg.includes('ERROR') && !msg.includes('Xatolik') && !msg.includes('Error')) return false;
+
+                if (searchQuery && !msg.toLowerCase().includes(searchQuery) && !l.time.includes(searchQuery)) {
+                    return false;
+                }
+                return true;
+            });
+
+            document.getElementById("footer-count").innerText = `Ko'rsatilmoqda: ${filtered.length} / Jami: ${allLogs.length} ta qator (Oxirgi 2 soat)`;
+
+            term.innerHTML = filtered.map(l => {
+                const cls = colorize(l.message);
+                return `<div class="log-line"><span class="log-time">${l.time}</span><span class="${cls}">${escapeHtml(l.message)}</span></div>`;
+            }).join("");
+
+            if (autoScroll) scrollToBottom();
+        }
+
         function fetchLogs() {
             fetch('/api/logs')
                 .then(r => r.json())
                 .then(data => {
-                    const term = document.getElementById("terminal");
-                    document.getElementById("footer-count").innerText = `Qatorlar: ${data.count} ta (Oxirgi 2 soat)`;
+                    allLogs = data.logs || [];
                     document.getElementById("footer-uptime").innerText = `Server ish vaqti: ${data.uptime}s | Holat: ${data.status}`;
+                    renderLogs();
 
-                    if (!data.logs || data.logs.length === 0) {
-                        term.innerHTML = '<div class="log-line log-system">Loglar mavjud emas yoki hali yozilmadi.</div>';
-                        return;
-                    }
-
-                    if (data.logs.length !== lastLogsLength) {
-                        term.innerHTML = data.logs.map(l => {
-                            const cls = colorize(l.message);
-                            return `<div class="log-line"><span class="log-time">${l.time}</span><span class="${cls}">${escapeHtml(l.message)}</span></div>`;
-                        }).join("");
-                        lastLogsLength = data.logs.length;
-                        if (autoScroll) scrollToBottom();
+                    // Dashboard stats
+                    if (data.data) {
+                        const d = data.data;
+                        if (d.status) {
+                            document.getElementById("stat-vote-status").innerText = d.status === 'ready_to_vote' ? "Ovoz berish mumkin! 🟢" : "Taymer kutilmoqda ⏳";
+                        }
+                        if (d.remaining_text) {
+                            document.getElementById("stat-vote-rem").innerText = `Qolgan vaqt: ${d.remaining_text}`;
+                        }
+                        if (d.active_afk_bots !== undefined) {
+                            document.getElementById("stat-afk-count").innerText = `${d.active_afk_bots} / ${d.max_afk_bots || 2}`;
+                        }
                     }
                 })
                 .catch(err => {
@@ -323,7 +678,7 @@ class HealthHandler(BaseHTTPRequestHandler):
         parsed_url = urlparse(self.path)
         clean_path = parsed_url.path.rstrip('/') or '/'
 
-        if clean_path in ["/logs", "/terminal"]:
+        if clean_path in ["/logs", "/terminal", "/dashboard"]:
             body = LOGS_HTML.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -335,11 +690,20 @@ class HealthHandler(BaseHTTPRequestHandler):
         if clean_path == "/api/logs":
             start_time = getattr(self.server, "start_time", time.time())
             logs = global_log_buffer.get_logs()
+            callback = getattr(self.server, "get_status_callback", None) or HealthHandler.get_status_callback
+            status_data = {}
+            if callback:
+                try:
+                    status_data = callback()
+                except Exception:
+                    pass
+
             response = {
                 "status": "healthy",
                 "uptime": int(time.time() - start_time),
                 "count": len(logs),
                 "window_hours": 2.0,
+                "data": status_data,
                 "logs": logs
             }
             body = json.dumps(response).encode("utf-8")
@@ -409,7 +773,7 @@ class HealthServer:
         self.port = self.server.server_port
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
-        print(f"[HealthServer] Server ishga tushdi: http://{self.host}:{self.port}/health (Loglar: /logs)")
+        print(f"[HealthServer] Server ishga tushdi: http://{self.host}:{self.port}/health (Veb Dashboard: /logs)")
 
     def start_keep_alive(self, external_url: str | None = None, interval: int = 600):
         """Render bepul serverini uxlab qolmasligi uchun har `interval` (10 daqiqa) soniyada avtomatik ping yuborish."""

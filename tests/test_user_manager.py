@@ -80,5 +80,31 @@ class TestUserManager(unittest.TestCase):
         self.assertEqual(conf["port"], 25577)
         self.assertEqual(conf["subserver"], "economy")
 
+    def test_ban_and_unban_user(self):
+        user_id = "88990011"
+        self.manager.get_or_create_user(user_id)
+        
+        # Ban
+        ok, res = self.manager.ban_user(user_id)
+        self.assertTrue(ok)
+        can_use, msg = self.manager.can_use_bot(user_id)
+        self.assertFalse(can_use)
+        self.assertIn("bloklangansiz", msg)
+
+        # Unban
+        ok2, res2 = self.manager.unban_user(user_id)
+        self.assertTrue(ok2)
+        can_use2, _ = self.manager.can_use_bot(user_id)
+        self.assertTrue(can_use2)
+
+    def test_get_stats(self):
+        self.manager.get_or_create_user("u1")
+        self.manager.grant_premium("u2", 10)
+        self.manager.ban_user("u3")
+        stats = self.manager.get_stats()
+        self.assertGreaterEqual(stats["total"], 3)
+        self.assertGreaterEqual(stats["premium"], 1)
+        self.assertGreaterEqual(stats["banned"], 1)
+
 if __name__ == "__main__":
     unittest.main()

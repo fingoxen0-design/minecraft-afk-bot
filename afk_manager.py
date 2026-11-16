@@ -21,6 +21,8 @@ class AFKBotSession:
         self.is_afk = False
         self.started_at: Optional[float] = None
         self.recent_logs: list[str] = []
+        self.health: Optional[float] = None
+        self.food: Optional[float] = None
         self._reader_thread: Optional[threading.Thread] = None
         self.is_running = False
 
@@ -61,6 +63,11 @@ class AFKBotSession:
 
                 elif event_type == "error":
                     self.status = "error"
+
+                elif event_type == "health":
+                    d = data.get("data", {})
+                    self.health = d.get("health")
+                    self.food = d.get("food")
 
                 # Loglarga qo'shish (oxirgi 15 ta)
                 log_entry = f"[{time.strftime('%H:%M:%S')}] [{event_type.upper()}] {msg}"
@@ -153,6 +160,20 @@ class AFKBotSession:
         self.is_afk = False
         return True, "AFK Bot to'xtatildi."
 
+    def send_chat(self, text: str) -> bool:
+        """Mineflayer jarayoniga o'yin chatida yozish uchun buyruq yuborish."""
+        if not self.process or not self.is_running or not self.process.stdin:
+            return False
+        try:
+            payload = json.dumps({"command": "chat", "text": text.strip()}) + "\n"
+            self.process.stdin.write(payload)
+            self.process.stdin.flush()
+            self.recent_logs.append(f"[{time.strftime('%H:%M:%S')}] [CHAT_OUT] {text.strip()}")
+            return True
+        except Exception as e:
+            print(f"[AFKBotSession] Xabar yuborishda xato: {e}")
+            return False
+
     def get_info(self) -> Dict[str, Any]:
         """Sessiya haqida to'liq holat."""
         uptime_sec = int(time.time() - self.started_at) if (self.started_at and self.is_running) else 0
@@ -165,6 +186,8 @@ class AFKBotSession:
             "status": self.status,
             "is_afk": self.is_afk,
             "server": self.current_server,
+            "health": self.health,
+            "food": self.food,
             "uptime_text": f"{hours}s {mins}d {secs}sek",
             "last_message": self.last_message,
             "username": self.mc_config.get("username"),
@@ -222,6 +245,19 @@ class AFKManager:
             if session:
                 return session.get_info()
             return None
+
+    def send_user_chat(self, user_id: str | int, text: str) -> Tuple[bool, str]:
+        """Foydalanuvchi nomidan Minecraft serveriga xabar yoki buyruq yuborish."""
+        uid = str(user_id)
+        with self._lock:
+            session = self.sessions.get(uid)
+            if not session or not session.is_running:
+                return False, "Sizning AFK botingiz hozirda faol emas. Avval /afk_start buyrug'ini bering."
+
+        ok = session.send_chat(text)
+        if ok:
+            return True, f"Xabar o'yinga yuborildi: <code>{text}</code>"
+        return False, "O'yinga xabar yuborishda xatolik yuz berdi."
 
     def stop_all(self):
         """Barcha botlarni to'xtatish (tizim o'chganda)."""

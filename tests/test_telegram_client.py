@@ -110,5 +110,26 @@ class TestTelegramClient(unittest.TestCase):
         self.assertEqual(kwargs["data"]["callback_query_id"], "cb_123")
         self.assertEqual(kwargs["data"]["text"], "Alert!")
 
+    @patch("requests.get")
+    def test_get_me(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"ok": True, "result": {"username": "test_bot"}}
+        mock_get.return_value = mock_resp
+
+        res = self.client.get_me()
+        self.assertEqual(res.get("username"), "test_bot")
+
+    @patch("requests.post")
+    def test_set_my_commands(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"ok": True}
+        mock_post.return_value = mock_resp
+
+        commands = [{"command": "start", "description": "start bot"}]
+        res = self.client.set_my_commands(commands)
+        self.assertTrue(res)
+
 if __name__ == "__main__":
     unittest.main()

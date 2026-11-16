@@ -69,5 +69,24 @@ class TestAFKManager(unittest.TestCase):
             self.assertFalse(s3)
             self.assertIn("to'lgan", msg3)
 
+    @patch.object(AFKBotSession, "_read_output", lambda self: None)
+    @patch("subprocess.Popen")
+    def test_send_chat_functionality(self, mock_popen):
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_stdin = MagicMock()
+        mock_proc.stdin = mock_stdin
+        mock_popen.return_value = mock_proc
+
+        self.manager.start_user_bot("u_chat", {"username": "ChatBot"})
+        ok, res = self.manager.send_user_chat("u_chat", "Salom dunyo!")
+        self.assertTrue(ok)
+        mock_stdin.write.assert_called_once()
+        self.assertIn("Salom dunyo!", mock_stdin.write.call_args[0][0])
+
+        # Test non-active user chat
+        fail_ok, fail_res = self.manager.send_user_chat("u_offline", "Salom")
+        self.assertFalse(fail_ok)
+
 if __name__ == "__main__":
     unittest.main()

@@ -28,11 +28,46 @@ class TelegramClient:
             resp = requests.post(url, data=payload, timeout=10)
             if resp.status_code == 200:
                 return True
+            elif resp.status_code == 400 and parse_mode:
+                # Agar HTML formatlash xatosi bo'lsa, xom matn sifatida qayta jo'natamiz
+                payload["parse_mode"] = ""
+                del payload["parse_mode"]
+                retry_resp = requests.post(url, data=payload, timeout=10)
+                if retry_resp.status_code == 200:
+                    return True
+                print(f"[TelegramClient] Xatolik {resp.status_code}: {resp.text}")
+                return False
             else:
                 print(f"[TelegramClient] Xatolik {resp.status_code}: {resp.text}")
                 return False
         except Exception as e:
             print(f"[TelegramClient] Tarmoq xatosi: {e}")
+            return False
+
+    def get_me(self) -> dict:
+        """Bot haqidagi ma'lumotlarni (username, id va h.k.) olish."""
+        if not self.token:
+            return {}
+        try:
+            resp = requests.get(f"{self.base_url}/getMe", timeout=8)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("ok"):
+                    return data.get("result", {})
+            return {}
+        except Exception:
+            return {}
+
+    def set_my_commands(self, commands: list) -> bool:
+        """Telegram menyusi uchun buyruqlar ro'yxatini ro'yxatdan o'tkazish."""
+        if not self.token or not commands:
+            return False
+        try:
+            url = f"{self.base_url}/setMyCommands"
+            resp = requests.post(url, json={"commands": commands}, timeout=8)
+            return resp.status_code == 200 and resp.json().get("ok", False)
+        except Exception as e:
+            print(f"[TelegramClient] Buyruqlarni sozlashda xato: {e}")
             return False
 
     def get_updates(self, offset: int = 0, timeout: int = 20) -> list:

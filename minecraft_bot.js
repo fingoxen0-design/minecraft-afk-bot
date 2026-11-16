@@ -147,6 +147,34 @@ function createBot() {
     }
   });
 
+  bot.on('health', () => {
+    if (!bot) return;
+    const h = bot.health != null ? bot.health.toFixed(0) : '?';
+    const f = bot.food != null ? bot.food.toFixed(0) : '?';
+    sendIPC('health', `Jon (Health): ${h}/20 | Ovqat (Food): ${f}/20`, { health: bot.health, food: bot.food });
+
+    if (bot.food < 15 && typeof tryAutoEat === 'function') {
+      tryAutoEat();
+    }
+  });
+
+  function tryAutoEat() {
+    if (!bot || !bot.inventory || isStopping) return;
+    const foodItem = bot.inventory.items().find(i => 
+      i.name.includes('cooked') || 
+      ['bread', 'apple', 'golden_carrot', 'baked_potato', 'steak'].includes(i.name)
+    );
+    if (foodItem) {
+      bot.equip(foodItem, 'hand', (err) => {
+        if (!err && bot) {
+          bot.consume(() => {
+            sendIPC('info', `Avto-ovqatlanish: ${foodItem.name} iste'mol qilindi.`);
+          });
+        }
+      });
+    }
+  }
+
   function triggerAfk() {
     if (!bot || isStopping) return;
     sendIPC('info', 'Sending /afk command...');

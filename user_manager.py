@@ -167,6 +167,56 @@ class UserManager:
         user = self.get_or_create_user(cid)
         return user.get("mc_config", {})
 
+    def ban_user(self, chat_id: str | int) -> Tuple[bool, str]:
+        """Foydalanuvchini bloklash."""
+        cid = str(chat_id).strip()
+        user = self.get_or_create_user(cid)
+        if self.is_admin(cid):
+            return False, "Adminni bloklab bo'lmaydi."
+        user["role"] = "banned"
+        self.save()
+        return True, f"Foydalanuvchi <code>{cid}</code> bloklandi."
+
+    def unban_user(self, chat_id: str | int) -> Tuple[bool, str]:
+        """Foydalanuvchini blokdan chiqarish."""
+        cid = str(chat_id).strip()
+        user = self.get_or_create_user(cid)
+        if user.get("role") == "banned":
+            user["role"] = "trial"
+            self.save()
+            return True, f"Foydalanuvchi <code>{cid}</code> blokdan chiqarildi."
+        return False, "Ushbu foydalanuvchi bloklanmagan."
+
+    def get_stats(self) -> Dict[str, int]:
+        """Foydalanuvchilar toifalari statistikasi."""
+        stats = {
+            "total": len(self.users),
+            "admin": 0,
+            "premium": 0,
+            "trial": 0,
+            "expired": 0,
+            "banned": 0
+        }
+        now = time.time()
+        for u in self.users.values():
+            role = u.get("role", "trial")
+            exp = u.get("expires_at")
+            if role == "admin" or self.is_admin(u.get("chat_id", "")):
+                stats["admin"] += 1
+            elif role == "banned":
+                stats["banned"] += 1
+            elif role == "premium":
+                if exp and now > exp:
+                    stats["expired"] += 1
+                else:
+                    stats["premium"] += 1
+            else:
+                if exp and now > exp:
+                    stats["expired"] += 1
+                else:
+                    stats["trial"] += 1
+        return stats
+
     def list_all_users(self) -> list[Dict[str, Any]]:
         """Barcha foydalanuvchilar ro'yxati."""
         return list(self.users.values())

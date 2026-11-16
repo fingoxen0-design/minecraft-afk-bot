@@ -135,26 +135,36 @@ sudo systemctl start mc-vote-bot
 * `/start` — Asosiy menyu va hisob holati
 * `/afk_start` — Minecraft AFK botni ishga tushirish
 * `/afk_stop` — AFK botni to'xtatish
-* `/afk_status` — Hozirgi holat va jonli loglar
+* `/afk_status` — Hozirgi holat, jon (HP), to'qlik va jonli loglar
+* `/say [matn]` — Minecraft server chatiga Telegramdan xabar yozish
+* `/cmd [buyruq]` — Minecraft serveriga buyruq yuborish (masalan: `/cmd /spawn`)
+* `/ping` — Bot va server javob tezligini tekshirish
+* `/logs` — Jonli Veb-Terminal va 2 soatlik Qora quti havolasi
+* `/settings` — Barcha bot sozlamalarini ko'rish
+* `/seturl [havola]` — Ovoz berish sayti havolasini o'zgartirish
+* `/setcooldown [soat]` — Taymer oraliq vaqtini o'zgartirish (masalan: 15)
 * `/setnick [nik]` — O'yinchi niki
 * `/setpass [parol]` — Server paroli (/login)
 * `/setserver [ip] [port] [subserver]` — Minecraft server manzili
 
 ### Ovoz Berish (Vote):
-* `/status` — Ovoz berish taymeri
+* `/status` — Ovoz berish taymeri holati
 * `/voted` — Ovoz berilganini qo'lda tasdiqlash
 * `/vote` — Ovoz berish havolasi
 
 ### Faqat Admin uchun:
-* `/admin` — Admin boshqaruv paneli va statistika
+* `/admin` — Admin boshqaruv paneli
+* `/stats` — Foydalanuvchilar va botlar to'liq statistikasi
 * `/grant [chat_id] [kunlar]` — Foydalanuvchiga obuna muddati berish
-* `/users` — Barcha foydalanuvchilar va ularning obuna muddati
+* `/ban [chat_id]` — Foydalanuvchini bloklash
+* `/unban [chat_id]` — Blokdan chiqarish
+* `/users` — Barcha foydalanuvchilar ro'yxati
 
 ---
 
 ## 🧪 Testlarni Ishga Tushirish
 
-Barcha 59 ta unit testlarni tekshirish uchun:
+Barcha 72 ta unit testlarni tekshirish uchun:
 ```bash
 python -m unittest discover tests
 ```
