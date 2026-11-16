@@ -1,0 +1,9 @@
+.env
+vote_state.json
+test_vote_state.json
+users.json
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.log
