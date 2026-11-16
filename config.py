@@ -76,8 +76,8 @@ DEFAULT_VOTE_URL = os.getenv(
 )
 COOLDOWN_HOURS = _get_float("COOLDOWN_HOURS", 15.0)
 
-# Monitoring / Health sozlamalari
-HEALTH_PORT = _get_int("HEALTH_PORT", 8080)
+# Monitoring / Health sozlamalari (Render yoki boshqa bulut platformalaridagi PORT ni ham qo'llab-quvvatlaydi)
+HEALTH_PORT = _get_int("HEALTH_PORT", _get_int("PORT", 8080))
 HEALTH_HOST = os.getenv("HEALTH_HOST", "0.0.0.0")
 
 # Watchdog (boshqa server) sozlamalari
