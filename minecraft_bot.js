@@ -4,6 +4,18 @@
  */
 
 const mineflayer = require('mineflayer');
+const mc = require('minecraft-protocol');
+
+process.on('uncaughtException', (err) => {
+  if (err && (err.name === 'PartialReadError' || (err.message && (err.message.includes('Missing characters') || err.message.includes('PartialReadError'))))) {
+    return;
+  }
+  sendIPC('error', `Uncaught exception: ${err ? err.message : 'Unknown'}`);
+});
+
+process.on('unhandledRejection', (reason) => {
+  sendIPC('info', `Unhandled Rejection: ${reason ? (reason.message || reason) : 'Unknown'}`);
+});
 
 // Argument parsing
 function parseArgs() {
@@ -55,35 +67,73 @@ let isAfkActive = false;
 let hasLoggedIn = false;
 let spawnCount = 0;
 
+function resolveVersion(callback) {
+  if (config.version && config.version !== 'auto') {
+    return callback(config.version);
+  }
+  let called = false;
+  const safeCallback = (v) => {
+    if (!called) {
+      called = true;
+      callback(v);
+    }
+  };
+
+  try {
+    mc.ping({ host: config.host, port: config.port, timeout: 5000 }, (err, res) => {
+      if (!err && res && res.version) {
+        const proto = res.version.protocol;
+        const protoMap = {
+          775: '1.21.1',
+          767: '1.21',
+          765: '1.20.4',
+          764: '1.20.2',
+          763: '1.20.1',
+          762: '1.19.4',
+          758: '1.18.2',
+          754: '1.16.5'
+        };
+        if (protoMap[proto]) return safeCallback(protoMap[proto]);
+        if (res.version.name && /^\d+\.\d+(\.\d+)?$/.test(res.version.name)) {
+          return safeCallback(res.version.name);
+        }
+      }
+      return safeCallback('1.21.1');
+    });
+  } catch (err) {
+    safeCallback('1.21.1');
+  }
+}
+
 function createBot() {
   if (isStopping) return;
 
-  sendIPC('status', 'connecting', { host: config.host, port: config.port, username: config.username });
+  resolveVersion((resolvedVersion) => {
+    if (isStopping) return;
 
-  const botOptions = {
-    host: config.host,
-    port: config.port,
-    username: config.username,
-    auth: 'offline',
-    checkTimeoutInterval: 60000,
-    hideErrors: false
-  };
+    sendIPC('status', 'connecting', { host: config.host, port: config.port, username: config.username, version: resolvedVersion });
 
-  if (config.version) {
-    botOptions.version = config.version;
-  }
+    const botOptions = {
+      host: config.host,
+      port: config.port,
+      username: config.username,
+      version: resolvedVersion,
+      auth: 'offline',
+      checkTimeoutInterval: 60000,
+      hideErrors: true
+    };
 
-  try {
-    bot = mineflayer.createBot(botOptions);
-  } catch (err) {
-    sendIPC('error', `Failed to initialize bot: ${err.message}`);
-    scheduleReconnect();
-    return;
-  }
+    try {
+      bot = mineflayer.createBot(botOptions);
+    } catch (err) {
+      sendIPC('error', `Failed to initialize bot: ${err.message}`);
+      scheduleReconnect();
+      return;
+    }
 
-  bot.on('login', () => {
-    sendIPC('status', 'logged_in', { username: bot.username });
-  });
+    bot.on('login', () => {
+      sendIPC('status', 'logged_in', { username: bot.username });
+    });
 
   bot.on('spawn', () => {
     spawnCount++;
@@ -103,7 +153,7 @@ function createBot() {
     // Attempt to switch to target subserver (e.g. /server economy)
     if (config.subserver && currentServer !== config.subserver) {
       setTimeout(() => {
-        if (!bot) return;
+        if (!bot || currentServer === config.subserver) return;
         sendIPC('info', `Requesting server switch: /server ${config.subserver}`);
         bot.chat(`/server ${config.subserver}`);
       }, 3500);
@@ -158,20 +208,22 @@ function createBot() {
     }
   });
 
-  function tryAutoEat() {
+  async function tryAutoEat() {
     if (!bot || !bot.inventory || isStopping) return;
-    const foodItem = bot.inventory.items().find(i => 
-      i.name.includes('cooked') || 
-      ['bread', 'apple', 'golden_carrot', 'baked_potato', 'steak'].includes(i.name)
-    );
-    if (foodItem) {
-      bot.equip(foodItem, 'hand', (err) => {
-        if (!err && bot) {
-          bot.consume(() => {
-            sendIPC('info', `Avto-ovqatlanish: ${foodItem.name} iste'mol qilindi.`);
-          });
+    try {
+      const foodItem = bot.inventory.items().find(i => 
+        i.name.includes('cooked') || 
+        ['bread', 'apple', 'golden_carrot', 'baked_potato', 'steak', 'carrot', 'baked_potato', 'sweet_berries'].includes(i.name)
+      );
+      if (foodItem) {
+        await bot.equip(foodItem, 'hand');
+        if (typeof bot.consume === 'function') {
+          await bot.consume();
+          sendIPC('info', `Avto-ovqatlanish: ${foodItem.name} iste'mol qilindi.`);
         }
-      });
+      }
+    } catch (_) {
+      // Ignore consumption errors
     }
   }
 
@@ -231,6 +283,7 @@ function createBot() {
     sendIPC('error', `Connection error: ${err.message}`);
     cleanupBot();
     scheduleReconnect();
+  });
   });
 }
 
