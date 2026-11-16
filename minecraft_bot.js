@@ -203,6 +203,185 @@ function resolveVersion(callback) {
   }
 }
 
+function recognizeDigits(cols, rows, buf, bg, minX, maxX, minY, maxY) {
+  try {
+    const colCounts = [];
+    for (let x = minX; x <= maxX; x++) {
+      let count = 0;
+      for (let y = minY; y <= maxY; y++) {
+        if (buf[y * cols + x] !== bg) count++;
+      }
+      colCounts.push({ x, count });
+    }
+
+    const segments = [];
+    let cur = null;
+    for (const c of colCounts) {
+      if (c.count > 0) {
+        if (!cur) cur = { startX: c.x, endX: c.x };
+        else cur.endX = c.x;
+      } else {
+        if (cur) {
+          if (cur.endX - cur.startX >= 1) segments.push(cur);
+          cur = null;
+        }
+      }
+    }
+    if (cur && cur.endX - cur.startX >= 1) segments.push(cur);
+
+    sendIPC('info', `[MAP_DIGITS] Found ${segments.length} digit segment(s): ${JSON.stringify(segments)}`);
+    if (segments.length === 0) return null;
+
+    let result = '';
+    for (const seg of segments) {
+      const sw = seg.endX - seg.startX + 1;
+      const sh = maxY - minY + 1;
+      const ratio = sw / sh;
+
+      let fgPixels = 0;
+      let topHalfFg = 0;
+      let bottomHalfFg = 0;
+      let leftHalfFg = 0;
+      let rightHalfFg = 0;
+      const midY = Math.floor((minY + maxY) / 2);
+      const midX = Math.floor((seg.startX + seg.endX) / 2);
+
+      for (let y = minY; y <= maxY; y++) {
+        for (let x = seg.startX; x <= seg.endX; x++) {
+          if (buf[y * cols + x] !== bg) {
+            fgPixels++;
+            if (y < midY) topHalfFg++;
+            else bottomHalfFg++;
+            if (x < midX) leftHalfFg++;
+            else rightHalfFg++;
+          }
+        }
+      }
+
+      function getCrossingsAt(yRatio) {
+        const y = Math.floor(minY + sh * yRatio);
+        let crossings = 0;
+        let inFg = false;
+        for (let x = seg.startX; x <= seg.endX; x++) {
+          const isFg = buf[y * cols + x] !== bg;
+          if (isFg && !inFg) {
+            crossings++;
+            inFg = true;
+          } else if (!isFg && inFg) {
+            inFg = false;
+          }
+        }
+        return crossings;
+      }
+
+      const c25 = getCrossingsAt(0.25);
+      const c50 = getCrossingsAt(0.50);
+      const c75 = getCrossingsAt(0.75);
+
+      let digit = '?';
+      if (ratio < 0.38) {
+        digit = '1';
+      } else if (c50 === 1 && c25 === 2 && c75 === 2) {
+        digit = '0';
+      } else if (c50 === 3 || c50 === 2) {
+        if (c25 === 1 && c75 === 2) digit = '6';
+        else if (c25 === 2 && c75 === 1) digit = '9';
+        else if (c25 === 2 && c75 === 2 && c50 === 2) digit = '8';
+        else if (topHalfFg < bottomHalfFg * 0.7) digit = '2';
+        else if (rightHalfFg > leftHalfFg * 1.3) digit = '3';
+        else digit = '5';
+      } else if (c50 === 1) {
+        if (c25 === 1 && topHalfFg > bottomHalfFg * 1.5) digit = '7';
+        else if (c75 === 1 && leftHalfFg < rightHalfFg) digit = '4';
+        else digit = '1';
+      } else {
+        digit = '0';
+      }
+
+      result += digit;
+    }
+
+    return result;
+  } catch (e) {
+    return null;
+  }
+}
+
+function handleMapCaptcha(data) {
+  try {
+    const cols = data.columns || 0;
+    const rows = data.rows || 0;
+    const buf = data.data;
+    const len = buf ? buf.length : 0;
+    sendIPC('info', `[MAP PACKET] itemDamage=${data.itemDamage}, cols=${cols}, rows=${rows}, len=${len}`);
+    if (!buf || len === 0 || cols === 0 || rows === 0) return;
+
+    const freq = {};
+    for (let i = 0; i < len; i++) {
+      const c = buf[i];
+      freq[c] = (freq[c] || 0) + 1;
+    }
+    let bg = null;
+    let maxCount = 0;
+    for (const c in freq) {
+      if (freq[c] > maxCount) {
+        maxCount = freq[c];
+        bg = Number(c);
+      }
+    }
+
+    let minX = cols, maxX = 0, minY = rows, maxY = 0;
+    let fgCount = 0;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        if (buf[y * cols + x] !== bg) {
+          fgCount++;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+
+    sendIPC('info', `[MAP ANALYSIS] bg=${bg}, fgCount=${fgCount}, bbox=[${minX},${minY} -> ${maxX},${maxY}]`);
+
+    if (fgCount > 20 && maxX >= minX && maxY >= minY) {
+      const asciiLines = [];
+      const stepY = (maxY - minY > 50) ? 2 : 1;
+      const stepX = (maxX - minX > 90) ? 2 : 1;
+      for (let y = minY; y <= maxY; y += stepY) {
+        let line = '';
+        for (let x = minX; x <= maxX; x += stepX) {
+          line += (buf[y * cols + x] !== bg) ? '#' : '.';
+        }
+        asciiLines.push(line);
+      }
+      sendIPC('info', `[MAP_ASCII]\n${asciiLines.join('\n')}`);
+
+      const code = recognizeDigits(cols, rows, buf, bg, minX, maxX, minY, maxY);
+      if (code) {
+        sendIPC('info', `[MAP_SOLVER] Successfully recognized captcha code: "${code}"`);
+        setTimeout(() => {
+          sendIPC('info', `Submitting captcha code: "${code}"`);
+          safeChat(code);
+          safeChat(`/captcha ${code}`);
+          safeChat(`/code ${code}`);
+
+          setTimeout(() => {
+            if (!hasLoggedIn && config.password) {
+              sendIPC('info', 'Sending login credentials after captcha solve...');
+              safeChat(`/login ${config.password}`);
+            }
+          }, 1500);
+        }, 800);
+      }
+    }
+  } catch (err) {
+    sendIPC('error', `Error analyzing map captcha: ${err.message}`);
+  }
+}
+
 function createBot() {
   if (isStopping) return;
 
@@ -275,7 +454,7 @@ function createBot() {
               triggerAfk();
             }, 3000);
           }
-        } else if (['open_window', 'set_slot', 'set_title_text', 'set_subtitle_text', 'set_action_bar_text', 'boss_bar', 'kick_disconnect', 'map_data', 'system_chat', 'player_chat'].includes(name)) {
+        } else if (['open_window', 'set_slot', 'set_title_text', 'set_subtitle_text', 'set_action_bar_text', 'boss_bar', 'kick_disconnect', 'map', 'system_chat', 'player_chat'].includes(name)) {
           let strings = [];
           function getStrings(obj) {
             if (!obj) return;
@@ -330,9 +509,9 @@ function createBot() {
             }
           }
 
-          // Map data packet handling (pixel buffer for map captcha)
-          if (name === 'map_data' && data) {
-            sendIPC('info', `Received map_data: mapId=${data.mapId}, cols=${data.columns}, rows=${data.rows}, dataLen=${data.data ? data.data.length : 0}`);
+          // Map packet handling (pixel buffer for map captcha)
+          if (name === 'map' && data) {
+            handleMapCaptcha(data);
           }
 
           // Auto-solve GUI Captcha if inventory window opens
