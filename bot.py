@@ -151,6 +151,7 @@ class MinecraftVoteBot:
                 f"🎮 <b>Hozirgi AFK Bot Niki:</b> <code>{mc_conf.get('username')}</code>\n"
                 f"🌐 <b>Server:</b> <code>{mc_conf.get('host')}:{mc_conf.get('port')}</code> (Subserver: <code>{mc_conf.get('subserver')}</code>)\n\n"
                 "📋 <b>Mavjud Buyruqlar:</b>\n"
+                "• /logs — Jonli veb-terminal havolasini olish (Oxirgi 2 soatlik loglar)\n"
                 "• /settings — Barcha bot sozlamalari va ma'lumotlarini ko'rish\n"
                 "• /seturl [havola] — Ovoz berish sayti havolasini o'zgartirish\n"
                 "• /setcooldown [soat] — Taymer oraliq vaqtini o'zgartirish (masalan: 15)\n"
@@ -247,9 +248,27 @@ class MinecraftVoteBot:
                 f"<i>O'zgartirish:</i> <code>/setpass YangiParol</code>\n\n"
                 f"🌐 <b>Server:</b> <code>{mc_conf.get('host')}:{mc_conf.get('port')}</code> (Subserver: <code>{mc_conf.get('subserver')}</code>)\n"
                 f"<i>O'zgartirish:</i> <code>/setserver host port subserver</code>\n\n"
-                f"⚡️ <b>Render Keep-Alive URL:</b>\n<code>https://minecraft-afk-bot-y7ak.onrender.com/health</code>"
+                f"⚡️ <b>Render Keep-Alive URL:</b>\n<code>https://minecraft-afk-bot-y7ak.onrender.com/health</code>\n\n"
+                f"🌐 <b>Jonli Veb-Loglar (2 soatlik Qora quti):</b>\n<code>https://minecraft-afk-bot-y7ak.onrender.com/logs</code>"
             )
             self.client.send_message(msg, chat_id=chat_id, reply_markup=self.get_main_keyboard(chat_id))
+
+        elif text.startswith("/logs"):
+            logs_url = "https://minecraft-afk-bot-y7ak.onrender.com/logs"
+            msg = (
+                "🌐 <b>Jonli Veb-Terminal (Server Loglari):</b>\n\n"
+                f"🔗 <a href=\"{logs_url}\">{logs_url}</a>\n\n"
+                "• ⏱ <b>Qora quti:</b> Oxirgi 2 soatlik loglar xotirada saqlanadi.\n"
+                "• 🚀 Avtomatik yangilanadi, hech qanday lag va sekinlashuv bo'lmaydi.\n"
+                "• 📱 Telefon va kompyuter brauzerida ochib kuzatib turishingiz mumkin!"
+            )
+            keyboard = {
+                "inline_keyboard": [
+                    [{"text": "🚀 Veb-Terminalni Ochish", "url": logs_url}],
+                    [{"text": "⏳ Qolgan vaqt", "callback_data": "check_status"}]
+                ]
+            }
+            self.client.send_message(msg, chat_id=chat_id, reply_markup=keyboard)
 
         elif text.startswith("/seturl") or text.startswith("/setvoteurl"):
             if not self.is_authorized(chat_id):

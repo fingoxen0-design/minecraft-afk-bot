@@ -77,6 +77,25 @@ class TestHealthServer(unittest.TestCase):
         finally:
             failing_server.stop()
 
+    def test_logs_web_terminal_endpoint(self):
+        url = f"http://127.0.0.1:{self.server.port}/logs"
+        req = urllib.request.urlopen(url, timeout=2)
+        self.assertEqual(req.status, 200)
+        self.assertIn("text/html", req.headers.get("Content-Type", ""))
+        content = req.read().decode("utf-8")
+        self.assertIn("Minecraft Bot", content)
+        self.assertIn("Oxirgi 2 soat", content)
+
+    def test_api_logs_endpoint(self):
+        url = f"http://127.0.0.1:{self.server.port}/api/logs"
+        req = urllib.request.urlopen(url, timeout=2)
+        self.assertEqual(req.status, 200)
+        self.assertIn("application/json", req.headers.get("Content-Type", ""))
+        data = json.loads(req.read().decode("utf-8"))
+        self.assertEqual(data["status"], "healthy")
+        self.assertEqual(data["window_hours"], 2.0)
+        self.assertIsInstance(data["logs"], list)
+
     def test_socket_reuse_flag(self):
         self.assertTrue(ReusableHTTPServer.allow_reuse_address)
 
