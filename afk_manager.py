@@ -32,58 +32,64 @@ class AFKBotSession:
         if not self.process or not self.process.stdout:
             return
 
-        for line in iter(self.process.stdout.readline, ''):
-            if not line:
-                break
-            line_str = line.strip()
-            if not line_str:
-                continue
+        try:
+            for line in iter(self.process.stdout.readline, ''):
+                if not line:
+                    break
+                line_str = line.strip()
+                if not line_str:
+                    continue
 
-            try:
-                data = json.loads(line_str)
-                event_type = data.get("type")
-                msg = data.get("message", "")
-                self.last_message = msg
+                try:
+                    data = json.loads(line_str)
+                    event_type = data.get("type")
+                    msg = data.get("message", "")
+                    self.last_message = msg
 
-                if event_type == "status":
-                    self.status = msg
-                    if msg == "in_economy":
-                        self.current_server = data.get("data", {}).get("server", "economy")
-                    elif msg == "afk_active":
-                        self.is_afk = True
-                        self.status = "afk_active"
-                    elif msg == "reconnecting":
+                    if event_type == "status":
+                        self.status = msg
+                        if msg == "in_economy":
+                            self.current_server = data.get("data", {}).get("server", "economy")
+                        elif msg == "afk_active":
+                            self.is_afk = True
+                            self.status = "afk_active"
+                        elif msg == "reconnecting":
+                            self.is_afk = False
+                            self.status = "reconnecting"
+                        elif msg == "stopped":
+                            self.status = "stopped"
+                            self.is_afk = False
+
+                    elif event_type == "kicked":
+                        self.status = "kicked"
                         self.is_afk = False
-                    elif msg == "stopped":
-                        self.status = "stopped"
-                        self.is_afk = False
 
-                elif event_type == "kicked":
-                    self.status = "kicked"
-                    self.is_afk = False
+                    elif event_type == "error":
+                        if self.status != "reconnecting":
+                            self.status = "error"
 
-                elif event_type == "error":
-                    self.status = "error"
+                    elif event_type == "health":
+                        d = data.get("data", {})
+                        self.health = d.get("health")
+                        self.food = d.get("food")
 
-                elif event_type == "health":
-                    d = data.get("data", {})
-                    self.health = d.get("health")
-                    self.food = d.get("food")
+                    # Loglarga qo'shish (oxirgi 15 ta)
+                    log_entry = f"[{time.strftime('%H:%M:%S')}] [{str(event_type).upper()}] {msg}"
+                    self.recent_logs.append(log_entry)
+                    if len(self.recent_logs) > 15:
+                        self.recent_logs.pop(0)
 
-                # Loglarga qo'shish (oxirgi 15 ta)
-                log_entry = f"[{time.strftime('%H:%M:%S')}] [{event_type.upper()}] {msg}"
-                self.recent_logs.append(log_entry)
-                if len(self.recent_logs) > 15:
-                    self.recent_logs.pop(0)
-
-            except json.JSONDecodeError:
-                # Agar to'g'ridan-to'g'ri matn bo'lsa
-                self.recent_logs.append(f"[{time.strftime('%H:%M:%S')}] {line_str}")
-                if len(self.recent_logs) > 15:
-                    self.recent_logs.pop(0)
-
-        self.status = "stopped"
-        self.is_running = False
+                except json.JSONDecodeError:
+                    # Agar to'g'ridan-to'g'ri matn bo'lsa
+                    self.recent_logs.append(f"[{time.strftime('%H:%M:%S')}] {line_str}")
+                    if len(self.recent_logs) > 15:
+                        self.recent_logs.pop(0)
+        except Exception as e:
+            print(f"[AFKBotSession] Stdout o'qishda ogohlantirish: {e}")
+        finally:
+            if not (self.process and self.process.poll() is None):
+                self.status = "stopped"
+                self.is_running = False
 
     def start(self) -> Tuple[bool, str]:
         """Node.js mineflayer jarayonini ishga tushirish."""
@@ -117,6 +123,7 @@ class AFKBotSession:
                 stderr=subprocess.STDOUT,
                 text=True,
                 encoding="utf-8",
+                errors="replace",
                 bufsize=1,
                 cwd=str(Path(__file__).resolve().parent)
             )

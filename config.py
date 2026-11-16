@@ -79,6 +79,14 @@ DEFAULT_VOTE_URL = os.getenv(
 )
 COOLDOWN_HOURS = _get_float("COOLDOWN_HOURS", 15.0)
 
+# Server ommaviy manzili (Render, Railway yoki boshqa VPS)
+SERVER_PUBLIC_URL = (
+    os.getenv("SERVER_PUBLIC_URL") or 
+    os.getenv("RENDER_EXTERNAL_URL") or 
+    os.getenv("KEEP_ALIVE_URL") or 
+    "https://minecraft-afk-bot-y7ak.onrender.com"
+).rstrip("/")
+
 # Monitoring / Health sozlamalari (Render yoki boshqa bulut platformalaridagi PORT ni ham qo'llab-quvvatlaydi)
 HEALTH_PORT = _get_int("HEALTH_PORT", _get_int("PORT", 8080))
 HEALTH_HOST = os.getenv("HEALTH_HOST", "0.0.0.0")
@@ -86,7 +94,7 @@ HEALTH_HOST = os.getenv("HEALTH_HOST", "0.0.0.0")
 # Watchdog (boshqa server) sozlamalari
 PRIMARY_SERVER_URL = os.getenv(
     "PRIMARY_SERVER_URL", 
-    f"http://127.0.0.1:{HEALTH_PORT}/health"
+    f"{SERVER_PUBLIC_URL}/health"
 )
 WATCHDOG_CHECK_INTERVAL = _get_int("WATCHDOG_CHECK_INTERVAL", 60)
 WATCHDOG_TIMEOUT = _get_int("WATCHDOG_TIMEOUT", 10)

@@ -22,7 +22,7 @@ class TestTelegramClient(unittest.TestCase):
         c2 = TelegramClient(token="token123", default_chat_id="")
         self.assertFalse(c2.send_message("hello"))
 
-    @patch("requests.post")
+    @patch.object(requests.Session, "post")
     def test_send_message_success(self, mock_post):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -41,7 +41,7 @@ class TestTelegramClient(unittest.TestCase):
         self.assertEqual(payload["parse_mode"], "HTML")
         self.assertEqual(payload["reply_markup"], json.dumps(markup))
 
-    @patch("requests.post")
+    @patch.object(requests.Session, "post")
     def test_send_message_failure_status(self, mock_post):
         mock_resp = MagicMock()
         mock_resp.status_code = 400
@@ -51,7 +51,7 @@ class TestTelegramClient(unittest.TestCase):
         result = self.client.send_message("Invalid HTML <unclosed")
         self.assertFalse(result)
 
-    @patch("requests.post")
+    @patch.object(requests.Session, "post")
     def test_send_message_network_exception(self, mock_post):
         mock_post.side_effect = requests.RequestException("DNS lookup failed")
         result = self.client.send_message("Hello")
@@ -61,7 +61,7 @@ class TestTelegramClient(unittest.TestCase):
         c = TelegramClient(token="")
         self.assertEqual(c.get_updates(), [])
 
-    @patch("requests.get")
+    @patch.object(requests.Session, "get")
     def test_get_updates_success(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -77,7 +77,7 @@ class TestTelegramClient(unittest.TestCase):
         self.assertEqual(len(updates), 1)
         self.assertEqual(updates[0]["update_id"], 1)
 
-    @patch("requests.get")
+    @patch.object(requests.Session, "get")
     def test_get_updates_not_ok(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -87,7 +87,7 @@ class TestTelegramClient(unittest.TestCase):
         updates = self.client.get_updates()
         self.assertEqual(updates, [])
 
-    @patch("requests.get")
+    @patch.object(requests.Session, "get")
     def test_get_updates_exception(self, mock_get):
         mock_get.side_effect = requests.RequestException("Timeout")
         updates = self.client.get_updates()
@@ -97,7 +97,7 @@ class TestTelegramClient(unittest.TestCase):
         c = TelegramClient(token="")
         self.assertFalse(c.answer_callback_query("cb_123"))
 
-    @patch("requests.post")
+    @patch.object(requests.Session, "post")
     def test_answer_callback_query_success(self, mock_post):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -110,7 +110,7 @@ class TestTelegramClient(unittest.TestCase):
         self.assertEqual(kwargs["data"]["callback_query_id"], "cb_123")
         self.assertEqual(kwargs["data"]["text"], "Alert!")
 
-    @patch("requests.get")
+    @patch.object(requests.Session, "get")
     def test_get_me(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -120,7 +120,7 @@ class TestTelegramClient(unittest.TestCase):
         res = self.client.get_me()
         self.assertEqual(res.get("username"), "test_bot")
 
-    @patch("requests.post")
+    @patch.object(requests.Session, "post")
     def test_set_my_commands(self, mock_post):
         mock_resp = MagicMock()
         mock_resp.status_code = 200

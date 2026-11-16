@@ -1,6 +1,7 @@
 import time
 import sys
 import threading
+import concurrent.futures
 from datetime import datetime
 from typing import Optional
 
@@ -21,6 +22,7 @@ class MinecraftVoteBot:
         # Yangi foydalanuvchilar va AFK bot menejerlari
         self.user_manager = UserManager()
         self.afk_manager = AFKManager()
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=8, thread_name_prefix="tg_worker")
 
         # Monitoring / Health serverni sozlaymiz
         self.health_server = HealthServer(
@@ -67,7 +69,7 @@ class MinecraftVoteBot:
                 {"text": "💬 O'yinga Yozish", "callback_data": "chat_help"}
             ],
             [
-                {"text": "📜 Veb Loglar", "url": "https://minecraft-afk-bot-y7ak.onrender.com/logs"},
+                {"text": "📜 Veb Loglar", "url": f"{config.SERVER_PUBLIC_URL}/logs"},
                 {"text": "⚙️ Sozlamalar", "callback_data": "bot_settings"}
             ]
         ]
@@ -279,13 +281,13 @@ class MinecraftVoteBot:
                 f"<i>O'zgartirish:</i> <code>/setpass YangiParol</code>\n\n"
                 f"🌐 <b>Server:</b> <code>{mc_conf.get('host')}:{mc_conf.get('port')}</code> (Subserver: <code>{mc_conf.get('subserver')}</code>)\n"
                 f"<i>O'zgartirish:</i> <code>/setserver host port subserver</code>\n\n"
-                f"⚡️ <b>Render Keep-Alive URL:</b>\n<code>https://minecraft-afk-bot-y7ak.onrender.com/health</code>\n\n"
-                f"🌐 <b>Jonli Veb-Loglar (2 soatlik Qora quti):</b>\n<code>https://minecraft-afk-bot-y7ak.onrender.com/logs</code>"
+                f"⚡️ <b>Server Healthcheck URL:</b>\n<code>{config.SERVER_PUBLIC_URL}/health</code>\n\n"
+                f"🌐 <b>Jonli Veb-Loglar (2 soatlik Qora quti):</b>\n<code>{config.SERVER_PUBLIC_URL}/logs</code>"
             )
             self.client.send_message(msg, chat_id=chat_id, reply_markup=self.get_main_keyboard(chat_id))
 
         elif text.startswith("/logs"):
-            logs_url = "https://minecraft-afk-bot-y7ak.onrender.com/logs"
+            logs_url = f"{config.SERVER_PUBLIC_URL}/logs"
             msg = (
                 "🌐 <b>Jonli Veb-Terminal (Server Loglari):</b>\n\n"
                 f"🔗 <a href=\"{logs_url}\">{logs_url}</a>\n\n"
@@ -327,7 +329,7 @@ class MinecraftVoteBot:
                 "🏓 <b>Pong!</b> Bot serverda 24/7 faol ishlamoqda.\n\n"
                 f"• Server holati: 🟢 <b>A'lo</b>\n"
                 f"• Taymer: <b>{summary['remaining_text']}</b>\n"
-                f"• Jonli veb-terminal: <a href=\"https://minecraft-afk-bot-y7ak.onrender.com/logs\">Ko'rish</a>",
+                f"• Jonli veb-terminal: <a href=\"{config.SERVER_PUBLIC_URL}/logs\">Ko'rish</a>",
                 chat_id=chat_id,
                 reply_markup=self.get_main_keyboard(chat_id)
             )
@@ -497,9 +499,11 @@ class MinecraftVoteBot:
             users = self.user_manager.list_all_users()
             lines = ["👥 <b>Foydalanuvchilar Ro'yxati:</b>\n"]
             for u in users:
-                cid = u.get("chat_id")
-                uname = f"@{u.get('username')}" if u.get("username") else u.get("first_name", "Noma'lum")
-                role = u.get("role", "trial")
+                cid = self._escape_html(str(u.get("chat_id", "")))
+                raw_u = u.get("username", "")
+                raw_f = u.get("first_name", "Noma'lum")
+                uname = f"@{self._escape_html(raw_u)}" if raw_u else self._escape_html(raw_f)
+                role = self._escape_html(str(u.get("role", "trial")))
                 lines.append(f"• <code>{cid}</code> | {uname} | <b>{role}</b>")
             self.client.send_message("\n".join(lines), chat_id=chat_id)
 
@@ -512,11 +516,13 @@ class MinecraftVoteBot:
                 self.client.send_message(msg, chat_id=chat_id, reply_markup=self.get_main_keyboard(chat_id))
 
     def handle_callback_query(self, query: dict):
-        """Tugmalar bosilganda ishlov berish."""
-        query_id = query.get("id")
-        data = query.get("data")
-        message = query.get("message", {})
-        chat_id = str(message.get("chat", {}).get("id", ""))
+        """Tugmalar bosilganda ishlov berish (AttributeError va NoneType himoyasi bilan)."""
+        query_id = str(query.get("id", ""))
+        data = str(query.get("data", ""))
+        message = query.get("message") or {}
+        chat_dict = message.get("chat") or {}
+        from_dict = query.get("from") or {}
+        chat_id = str(chat_dict.get("id") or from_dict.get("id") or "")
 
         if data == "voted_now":
             if not self.is_authorized(chat_id):
@@ -616,23 +622,24 @@ class MinecraftVoteBot:
             time.sleep(20)
 
     def polling_loop(self):
-        """Telegram xabarlarini doimiy qabul qilish sikli."""
+        """Telegram xabarlarini doimiy qabul qilish sikli (Asinxron ThreadPool bilan)."""
         print("[Polling] Telegram xabarlarini qabul qilish boshlandi...")
-        offset = 0
+        offset = int(self.tracker.state.get("last_update_id", 0))
         while self.is_running:
             try:
                 updates = self.client.get_updates(offset=offset, timeout=15)
                 for update in updates:
                     offset = update.get("update_id", 0) + 1
+                    self.tracker.state["last_update_id"] = offset
                     if "message" in update:
                         msg = update["message"]
                         chat_id = str(msg.get("chat", {}).get("id", ""))
                         text = msg.get("text", "")
                         user_info = msg.get("from", {})
                         if text:
-                            self.handle_message(chat_id, text, user_info=user_info)
+                            self.executor.submit(self.handle_message, chat_id, text, user_info)
                     elif "callback_query" in update:
-                        self.handle_callback_query(update["callback_query"])
+                        self.executor.submit(self.handle_callback_query, update["callback_query"])
             except Exception as e:
                 print(f"[Polling] Xatolik: {e}")
                 time.sleep(3)
@@ -692,6 +699,13 @@ class MinecraftVoteBot:
 
     def stop(self):
         self.is_running = False
+        if hasattr(self, "executor"):
+            try:
+                self.executor.shutdown(wait=False)
+            except Exception:
+                pass
+        if hasattr(self, "client"):
+            self.client.close()
         self.health_server.stop()
         self.afk_manager.stop_all()
         print("[System] Bot va barcha AFK sessiyalari to'xtatildi.")

@@ -1,15 +1,34 @@
-import requests
 import json
 import time
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 class TelegramClient:
     def __init__(self, token: str, default_chat_id: str = ""):
         self.token = token
         self.default_chat_id = default_chat_id
         self.base_url = f"https://api.telegram.org/bot{self.token}"
+        
+        # HTTP Connection Pooling (Session) va TCP ulanishlarni qayta ishlatish
+        self.session = requests.Session()
+        adapter = HTTPAdapter(
+            pool_connections=15,
+            pool_maxsize=30,
+            max_retries=Retry(total=2, backoff_factor=0.5, status_forcelist=[500, 502, 503, 504])
+        )
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
+
+    def close(self):
+        """Sessiyani xavfsiz yopish."""
+        try:
+            self.session.close()
+        except Exception:
+            pass
 
     def send_message(self, text: str, chat_id: str = None, reply_markup: dict = None, parse_mode: str = "HTML") -> bool:
-        """Telegram orqali xabar jo'natish."""
+        """Telegram orqali xabar jo'natish (Rate Limit va HTML fallback bilan)."""
         target_chat = chat_id or self.default_chat_id
         if not self.token or not target_chat:
             print(f"[TelegramClient] Ogohlantirish: Token yoki Chat ID ko'rsatilmagan! Xabar: {text[:40]}...")
@@ -25,14 +44,27 @@ class TelegramClient:
             payload["reply_markup"] = json.dumps(reply_markup)
 
         try:
-            resp = requests.post(url, data=payload, timeout=10)
+            resp = self.session.post(url, data=payload, timeout=12)
             if resp.status_code == 200:
                 return True
+            elif resp.status_code == 429:
+                # Telegram Rate Limit / FloodWait
+                retry_after = 5
+                try:
+                    err_data = resp.json()
+                    retry_after = int(err_data.get("parameters", {}).get("retry_after", 5))
+                except Exception:
+                    pass
+                print(f"[TelegramClient] FloodWait (429): {retry_after} soniya kutilmoqda...")
+                time.sleep(retry_after)
+                # Qayta urinib ko'rish
+                retry_resp = self.session.post(url, data=payload, timeout=12)
+                return retry_resp.status_code == 200
             elif resp.status_code == 400 and parse_mode:
                 # Agar HTML formatlash xatosi bo'lsa, xom matn sifatida qayta jo'natamiz
-                payload["parse_mode"] = ""
-                del payload["parse_mode"]
-                retry_resp = requests.post(url, data=payload, timeout=10)
+                payload_raw = payload.copy()
+                del payload_raw["parse_mode"]
+                retry_resp = self.session.post(url, data=payload_raw, timeout=12)
                 if retry_resp.status_code == 200:
                     return True
                 print(f"[TelegramClient] Xatolik {resp.status_code}: {resp.text}")
@@ -49,7 +81,7 @@ class TelegramClient:
         if not self.token:
             return {}
         try:
-            resp = requests.get(f"{self.base_url}/getMe", timeout=8)
+            resp = self.session.get(f"{self.base_url}/getMe", timeout=8)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("ok"):
@@ -64,14 +96,14 @@ class TelegramClient:
             return False
         try:
             url = f"{self.base_url}/setMyCommands"
-            resp = requests.post(url, json={"commands": commands}, timeout=8)
+            resp = self.session.post(url, json={"commands": commands}, timeout=8)
             return resp.status_code == 200 and resp.json().get("ok", False)
         except Exception as e:
             print(f"[TelegramClient] Buyruqlarni sozlashda xato: {e}")
             return False
 
     def get_updates(self, offset: int = 0, timeout: int = 20) -> list:
-        """Yangi kelgan xabarlarni (updates) olish."""
+        """Yangi kelgan xabarlarni (updates) olish (429 RateLimit va 5xx himoyasi bilan)."""
         if not self.token:
             return []
 
@@ -81,13 +113,35 @@ class TelegramClient:
             "timeout": timeout
         }
         try:
-            resp = requests.get(url, params=params, timeout=timeout + 5)
+            resp = self.session.get(url, params=params, timeout=timeout + 5)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("ok"):
                     return data.get("result", [])
+                return []
+            elif resp.status_code == 429:
+                retry_after = 5
+                try:
+                    retry_after = int(resp.json().get("parameters", {}).get("retry_after", 5))
+                except Exception:
+                    pass
+                print(f"[TelegramClient] Polling FloodWait (429): {retry_after} soniya kutilmoqda...")
+                time.sleep(retry_after)
+                return []
+            elif resp.status_code in [500, 502, 503, 504]:
+                print(f"[TelegramClient] Telegram server xatosi ({resp.status_code}), 5s tanaffus...")
+                time.sleep(5)
+                return []
+            else:
+                print(f"[TelegramClient] getUpdates xatolik {resp.status_code}: {resp.text}")
+                time.sleep(2)
+                return []
+        except requests.RequestException as e:
+            print(f"[TelegramClient] Polling tarmoq xatosi: {e}")
+            time.sleep(3)
             return []
         except Exception as e:
+            print(f"[TelegramClient] Kutilmagan polling xatosi: {e}")
             time.sleep(2)
             return []
 
@@ -97,7 +151,7 @@ class TelegramClient:
             return False
         url = f"{self.base_url}/answerCallbackQuery"
         try:
-            resp = requests.post(url, data={"callback_query_id": callback_query_id, "text": text}, timeout=5)
+            resp = self.session.post(url, data={"callback_query_id": callback_query_id, "text": text}, timeout=5)
             return resp.status_code == 200
         except Exception:
             return False

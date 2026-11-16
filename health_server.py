@@ -777,7 +777,7 @@ class HealthServer:
 
     def start_keep_alive(self, external_url: str | None = None, interval: int = 600):
         """Render bepul serverini uxlab qolmasligi uchun har `interval` (10 daqiqa) soniyada avtomatik ping yuborish."""
-        url = external_url or os.getenv("RENDER_EXTERNAL_URL") or os.getenv("KEEP_ALIVE_URL") or "https://minecraft-afk-bot-y7ak.onrender.com"
+        url = external_url or getattr(config, "SERVER_PUBLIC_URL", None) or os.getenv("RENDER_EXTERNAL_URL") or os.getenv("KEEP_ALIVE_URL") or "https://minecraft-afk-bot-y7ak.onrender.com"
         if not url:
             return
 

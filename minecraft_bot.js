@@ -61,6 +61,8 @@ function sendIPC(type, message, data = {}) {
 
 let bot = null;
 let antiKickInterval = null;
+let afkReaffirmInterval = null;
+let serverSwitchInterval = null;
 let isStopping = false;
 let currentServer = 'hub';
 let isAfkActive = false;
@@ -135,6 +137,36 @@ function createBot() {
       sendIPC('status', 'logged_in', { username: bot.username });
     });
 
+  function startServerSwitchLoop() {
+    if (serverSwitchInterval) clearInterval(serverSwitchInterval);
+    if (!config.subserver || currentServer === config.subserver) return;
+
+    let attempts = 0;
+    const trySwitch = () => {
+      if (!bot || isStopping || currentServer === config.subserver) {
+        if (serverSwitchInterval) {
+          clearInterval(serverSwitchInterval);
+          serverSwitchInterval = null;
+        }
+        return;
+      }
+      if (attempts >= 8) {
+        if (serverSwitchInterval) {
+          clearInterval(serverSwitchInterval);
+          serverSwitchInterval = null;
+        }
+        sendIPC('info', `Server switch: Max attempts reached for ${config.subserver}`);
+        return;
+      }
+      attempts++;
+      sendIPC('info', `Requesting server switch (${attempts}/8): /server ${config.subserver}`);
+      bot.chat(`/server ${config.subserver}`);
+    };
+
+    setTimeout(trySwitch, 2500);
+    serverSwitchInterval = setInterval(trySwitch, 8000);
+  }
+
   bot.on('spawn', () => {
     spawnCount++;
     sendIPC('info', `Bot spawned (spawn count: ${spawnCount})`);
@@ -150,13 +182,9 @@ function createBot() {
       }, 1500);
     }
 
-    // Attempt to switch to target subserver (e.g. /server economy)
+    // Attempt to switch to target subserver with retry loop
     if (config.subserver && currentServer !== config.subserver) {
-      setTimeout(() => {
-        if (!bot || currentServer === config.subserver) return;
-        sendIPC('info', `Requesting server switch: /server ${config.subserver}`);
-        bot.chat(`/server ${config.subserver}`);
-      }, 3500);
+      startServerSwitchLoop();
     } else if (currentServer === config.subserver && !isAfkActive) {
       triggerAfk();
     }
@@ -186,6 +214,10 @@ function createBot() {
         lower.includes(`connected to ${sub}`) ||
         lower.includes(`[${sub}]`)) {
       currentServer = config.subserver;
+      if (serverSwitchInterval) {
+        clearInterval(serverSwitchInterval);
+        serverSwitchInterval = null;
+      }
       sendIPC('status', 'in_economy', { server: config.subserver });
       setTimeout(triggerAfk, 2500);
     }
@@ -238,33 +270,40 @@ function createBot() {
   function checkAndApplyAfk() {
     if (!bot || isStopping) return;
     currentServer = config.subserver;
+    if (serverSwitchInterval) {
+      clearInterval(serverSwitchInterval);
+      serverSwitchInterval = null;
+    }
     sendIPC('status', 'in_economy', { server: config.subserver });
     triggerAfk();
   }
 
-  // Anti-Kick loop (gentle yaw rotation and micro-actions)
+  // Anti-Kick loop (gentle yaw rotation without jumping, to keep /afk intact)
   if (config.antiKick) {
     if (antiKickInterval) clearInterval(antiKickInterval);
     antiKickInterval = setInterval(() => {
       if (!bot || !bot.entity || isStopping) return;
       try {
-        const yawDelta = (Math.random() - 0.5) * 0.4;
+        const yawDelta = (Math.random() - 0.5) * 0.3;
         const newYaw = bot.entity.yaw + yawDelta;
         bot.look(newYaw, bot.entity.pitch, true);
-
-        // Small jump or sneak occasionally if on ground
-        if (bot.entity.onGround && Math.random() > 0.6) {
-          bot.setControlState('jump', true);
-          setTimeout(() => {
-            if (bot) bot.setControlState('jump', false);
-          }, 350);
-        }
         sendIPC('info', 'Anti-kick heartbeat pulse sent');
       } catch (err) {
         // Ignore rotation errors if entity not ready
       }
     }, 45000);
   }
+
+  // Davriy /afk yangilab turish (har 5 daqiqada tasodifan /afk dan chiqib ketishining oldini olish)
+  if (afkReaffirmInterval) clearInterval(afkReaffirmInterval);
+  afkReaffirmInterval = setInterval(() => {
+    if (!bot || isStopping) return;
+    if (currentServer === config.subserver) {
+      sendIPC('info', 'Periodic /afk reaffirmation sent');
+      bot.chat('/afk');
+      isAfkActive = true;
+    }
+  }, 300000);
 
   bot.on('kicked', (reason) => {
     let reasonText = typeof reason === 'string' ? reason : JSON.stringify(reason);
@@ -291,6 +330,14 @@ function cleanupBot() {
   if (antiKickInterval) {
     clearInterval(antiKickInterval);
     antiKickInterval = null;
+  }
+  if (afkReaffirmInterval) {
+    clearInterval(afkReaffirmInterval);
+    afkReaffirmInterval = null;
+  }
+  if (serverSwitchInterval) {
+    clearInterval(serverSwitchInterval);
+    serverSwitchInterval = null;
   }
   isAfkActive = false;
   hasLoggedIn = false;
