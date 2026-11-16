@@ -9,6 +9,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 from typing import Callable
 from urllib.parse import urlparse
+import config
 
 class LogBuffer:
     """Oxirgi 2 soatlik loglarni xotirada xavfsiz (qora quti sifatida) saqlovchi bufer."""
@@ -786,6 +787,7 @@ class HealthServer:
             target = url.rstrip('/') + '/health'
             print(f"[KeepAlive] Render anti-sleep tizimi yoqildi: {target} (har {interval // 60} daqiqada)")
             while getattr(self, "keep_alive_running", True):
+                sleep_time = interval
                 try:
                     req = urllib.request.Request(
                         target,
@@ -794,9 +796,19 @@ class HealthServer:
                     with urllib.request.urlopen(req, timeout=20) as res:
                         if res.status == 200:
                             print(f"[KeepAlive] Render uyg'oq saqlandi (Status: 200 OK)")
+                            sleep_time = interval
+                        else:
+                            print(f"[KeepAlive] Kutilmagan status: {res.status} (30 soniyadan so'ng qayta uriniladi)")
+                            sleep_time = 30
                 except Exception as e:
-                    print(f"[KeepAlive] Ping ogohlantirishi: {e}")
-                time.sleep(interval)
+                    print(f"[KeepAlive] Ping ogohlantirishi: {e} (30 soniyadan so'ng qayta uriniladi)")
+                    sleep_time = 30
+
+                step = 1.0
+                slept = 0.0
+                while slept < sleep_time and getattr(self, "keep_alive_running", True):
+                    time.sleep(min(step, sleep_time - slept))
+                    slept += step
 
         self.keep_alive_running = True
         self.keep_alive_thread = threading.Thread(target=_ping_loop, daemon=True)
