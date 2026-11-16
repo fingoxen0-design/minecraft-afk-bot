@@ -275,10 +275,65 @@ function createBot() {
               triggerAfk();
             }, 3000);
           }
-        } else if (['open_window', 'set_slot', 'set_title_text', 'set_action_bar_text', 'boss_bar', 'kick_disconnect'].includes(name)) {
-          let summary = '';
-          try { summary = JSON.stringify(data).slice(0, 140); } catch (_) {}
-          sendIPC('info', `[PACKET:${name}] ${summary}`);
+        } else if (['open_window', 'set_slot', 'set_title_text', 'set_subtitle_text', 'set_action_bar_text', 'boss_bar', 'kick_disconnect', 'map_data', 'system_chat', 'player_chat'].includes(name)) {
+          let strings = [];
+          function getStrings(obj) {
+            if (!obj) return;
+            if (typeof obj === 'string') { strings.push(obj); return; }
+            if (typeof obj === 'number') { strings.push(String(obj)); return; }
+            if (Array.isArray(obj)) { obj.forEach(getStrings); return; }
+            if (typeof obj === 'object') {
+              if (obj.value != null && typeof obj.value === 'string') strings.push(obj.value);
+              if (obj.text != null && typeof obj.text === 'string') strings.push(obj.text);
+              for (const k of Object.keys(obj)) {
+                if (['color', 'font', 'bold', 'italic', 'underlined', 'strikethrough', 'obfuscated', 'type'].includes(k)) continue;
+                getStrings(obj[k]);
+              }
+            }
+          }
+          try { getStrings(data); } catch (_) {}
+          const cleanText = [...new Set(strings)].filter(s => s.trim().length > 0).join(' ');
+          let rawJson = '';
+          try { rawJson = JSON.stringify(data).slice(0, 500); } catch (_) {}
+          sendIPC('info', `[PACKET:${name}] text="${cleanText}" raw=${rawJson}`);
+
+          // Check if packet text contains captcha instruction or code
+          if (cleanText) {
+            const codeMatch = cleanText.match(/(?:\/captcha|\/code)\s+([0-9a-zA-Z]+)/i) ||
+                              cleanText.match(/(?:kod|code|captcha)[:\s]+([0-9a-zA-Z]{3,8})/i) ||
+                              cleanText.match(/^([0-9a-zA-Z]{4,8})$/);
+            if (codeMatch && codeMatch[1]) {
+              const captchaCode = codeMatch[1];
+              sendIPC('info', `Auto-Captcha: Extracted code "${captchaCode}" from packet ${name}`);
+              setTimeout(() => {
+                safeChat(captchaCode);
+                safeChat(`/captcha ${captchaCode}`);
+              }, 500);
+            }
+          }
+
+          // Filled map handling (slot 36 = first hotbar slot)
+          if (name === 'set_slot' && data && data.item) {
+            const itemId = data.item.itemId || data.item.id;
+            if (itemId === 982 || (data.item.name && data.item.name.includes('map'))) {
+              sendIPC('info', `Received map item in slot ${data.slot}: equipping to hotbar slot 0`);
+              try {
+                if (bot && typeof bot.setQuickBarSlot === 'function') {
+                  bot.setQuickBarSlot(0);
+                }
+                if (bot && typeof bot.activateItem === 'function') {
+                  setTimeout(() => {
+                    try { bot.activateItem(); } catch (_) {}
+                  }, 800);
+                }
+              } catch (_) {}
+            }
+          }
+
+          // Map data packet handling (pixel buffer for map captcha)
+          if (name === 'map_data' && data) {
+            sendIPC('info', `Received map_data: mapId=${data.mapId}, cols=${data.columns}, rows=${data.rows}, dataLen=${data.data ? data.data.length : 0}`);
+          }
 
           // Auto-solve GUI Captcha if inventory window opens
           if (name === 'open_window' && data) {
