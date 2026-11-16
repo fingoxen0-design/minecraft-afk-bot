@@ -246,6 +246,24 @@ class MinecraftVoteBot:
                 msg = "❌ Masalan: <code>/setpass MaxfiyParol123</code> ko'rinishida yuboring."
             self.client.send_message(msg, chat_id=chat_id)
 
+        elif text.startswith("/setserver"):
+            parts = text.split()
+            if len(parts) > 1:
+                host = parts[1].strip()
+                port = int(parts[2].strip()) if len(parts) > 2 and parts[2].strip().isdigit() else config.DEFAULT_MC_PORT
+                subserver = parts[3].strip() if len(parts) > 3 else config.DEFAULT_MC_SUBSERVER
+                self.user_manager.update_mc_config(chat_id, host=host, port=port, subserver=subserver)
+                msg = (
+                    "✅ <b>Minecraft server sozlamalari yangilandi!</b>\n\n"
+                    f"🌐 <b>Host:</b> <code>{host}</code>\n"
+                    f"🔌 <b>Port:</b> <code>{port}</code>\n"
+                    f"🧭 <b>Subserver:</b> <code>{subserver}</code>\n\n"
+                    "Endi <b>/afk_start</b> buyrug'ini yuborsangiz, bot ushbu serverga ulanadi."
+                )
+            else:
+                msg = "❌ Masalan: <code>/setserver allaysmp.pro 25565 lobby</code> ko'rinishida yuboring."
+            self.client.send_message(msg, chat_id=chat_id, reply_markup=self.get_main_keyboard(chat_id))
+
         elif text.startswith("/settings"):
             mc_conf = self.user_manager.get_mc_config(chat_id)
             cd_hours = self.tracker.state.get('cooldown_hours', config.COOLDOWN_HOURS)
@@ -484,6 +502,14 @@ class MinecraftVoteBot:
                 role = u.get("role", "trial")
                 lines.append(f"• <code>{cid}</code> | {uname} | <b>{role}</b>")
             self.client.send_message("\n".join(lines), chat_id=chat_id)
+
+        else:
+            if text.startswith("/"):
+                msg = (
+                    f"❓ <b>Noma'lum buyruq:</b> <code>{self._escape_html(text)}</code>\n\n"
+                    "Barcha mavjud buyruqlarni ko'rish uchun /start yoki /settings buyrug'ini bosing."
+                )
+                self.client.send_message(msg, chat_id=chat_id, reply_markup=self.get_main_keyboard(chat_id))
 
     def handle_callback_query(self, query: dict):
         """Tugmalar bosilganda ishlov berish."""

@@ -267,6 +267,28 @@ class TestBot(unittest.TestCase):
         last_msg = self.bot.client.send_message.call_args[0][0]
         self.assertIn("/say", last_msg)
 
+    def test_setserver_command(self):
+        # Full arguments
+        self.bot.handle_message("123456789", "/setserver allaysmp.pro 25565 lobby")
+        last_msg = self.bot.client.send_message.call_args[0][0]
+        self.assertIn("allaysmp.pro", last_msg)
+        self.assertIn("25565", last_msg)
+        self.assertIn("lobby", last_msg)
+        conf = self.bot.user_manager.get_mc_config("123456789")
+        self.assertEqual(conf["host"], "allaysmp.pro")
+        self.assertEqual(conf["port"], 25565)
+        self.assertEqual(conf["subserver"], "lobby")
+
+        # Empty arguments
+        self.bot.handle_message("123456789", "/setserver")
+        last_msg = self.bot.client.send_message.call_args[0][0]
+        self.assertIn("Masalan", last_msg)
+
+    def test_unknown_command(self):
+        self.bot.handle_message("123456789", "/unknown_cmd_xyz")
+        last_msg = self.bot.client.send_message.call_args[0][0]
+        self.assertIn("Noma'lum buyruq", last_msg)
+
     def test_stop(self):
         self.bot.is_running = True
         self.bot.stop()
