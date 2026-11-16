@@ -580,6 +580,7 @@ class MinecraftVoteBot:
     def scheduler_loop(self):
         """Orqa fonda vaqtni tekshirib turuvchi rejalashtiruvchi."""
         print("[Scheduler] Fon monitoringi ishga tushdi.")
+        time.sleep(15)
         while self.is_running:
             try:
                 # Agar Telegram token bo'lmasa, eslatma yuborishni o'tkazib yuboramiz

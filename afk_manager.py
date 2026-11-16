@@ -237,9 +237,11 @@ class AFKManager:
         """Foydalanuvchi botini ishga tushirish (limitlarni inobatga olgan holda)."""
         uid = str(user_id)
         with self._lock:
-            # Agar mavjud bot ishlayotgan bo'lsa
-            if uid in self.sessions and self.sessions[uid].is_running:
-                return False, "Sizning AFK botingiz allaqachon ishlab turibdi."
+            # Agar mavjud bot ishlayotgan yoki ulanayotgan bo'lsa
+            if uid in self.sessions:
+                s = self.sessions[uid]
+                if s.is_running or s.status in ["connecting", "reconnecting", "logged_in", "in_economy", "afk_active"]:
+                    return False, "Sizning AFK botingiz allaqachon ishlab turibdi."
 
             # Max faol botlar cheklovi (1-2 ta) (Adminlar cheklovdan ozod)
             is_admin = False
@@ -254,10 +256,13 @@ class AFKManager:
                 return False, f"Serverda maksimal faol botlar soni ({config.MAX_ACTIVE_BOTS} ta) to'lgan. Birozdan so'ng urinib ko'ring."
 
             session = AFKBotSession(uid, mc_config)
+            session.status = "connecting"
+            session.is_running = True
             self.sessions[uid] = session
-
-        success, msg = session.start()
-        return success, msg
+            success, msg = session.start()
+            if not success:
+                session.is_running = False
+            return success, msg
 
     def stop_user_bot(self, user_id: str | int) -> Tuple[bool, str]:
         """Foydalanuvchi botini to'xtatish."""
