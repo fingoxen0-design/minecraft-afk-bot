@@ -469,6 +469,7 @@ class MinecraftVoteBot:
 
         # 1. Healthcheck HTTP serverini yoqish
         self.health_server.start()
+        self.health_server.start_keep_alive()
 
         # 2. Scheduler fon oqimini yoqish
         scheduler_thread = threading.Thread(target=self.scheduler_loop, daemon=True)

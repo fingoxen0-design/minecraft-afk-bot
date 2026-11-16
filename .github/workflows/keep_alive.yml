@@ -1,0 +1,22 @@
+name: Keep Render Alive
+
+on:
+  schedule:
+    # Har 10 daqiqada Render serveriga so'rov yuborib uni doimiy uyg'oq saqlash
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Web Service
+        run: |
+          echo "Pinging Render server at $(date)..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://minecraft-afk-bot-y7ak.onrender.com/health)
+          echo "Render javob kodi: $STATUS"
+          if [ "$STATUS" -eq 200 ]; then
+            echo "✅ Render muvaffaqiyatli uyg'oq saqlanmoqda!"
+          else
+            echo "⚠️ Status kodi: $STATUS"
+          fi

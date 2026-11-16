@@ -1,5 +1,7 @@
 import json
+import os
 import time
+import urllib.request
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 from typing import Callable
@@ -75,7 +77,35 @@ class HealthServer:
         self.thread.start()
         print(f"[HealthServer] Server ishga tushdi: http://{self.host}:{self.port}/health")
 
+    def start_keep_alive(self, external_url: str | None = None, interval: int = 600):
+        """Render bepul serverini uxlab qolmasligi uchun har `interval` (10 daqiqa) soniyada avtomatik ping yuborish."""
+        url = external_url or os.getenv("RENDER_EXTERNAL_URL") or os.getenv("KEEP_ALIVE_URL") or "https://minecraft-afk-bot-y7ak.onrender.com"
+        if not url:
+            return
+
+        def _ping_loop():
+            time.sleep(20)  # Dastlabki ishga tushishni kutamiz
+            target = url.rstrip('/') + '/health'
+            print(f"[KeepAlive] Render anti-sleep tizimi yoqildi: {target} (har {interval // 60} daqiqada)")
+            while getattr(self, "keep_alive_running", True):
+                try:
+                    req = urllib.request.Request(
+                        target,
+                        headers={"User-Agent": "Render-KeepAlive/1.0"}
+                    )
+                    with urllib.request.urlopen(req, timeout=20) as res:
+                        if res.status == 200:
+                            print(f"[KeepAlive] Render uyg'oq saqlandi (Status: 200 OK)")
+                except Exception as e:
+                    print(f"[KeepAlive] Ping ogohlantirishi: {e}")
+                time.sleep(interval)
+
+        self.keep_alive_running = True
+        self.keep_alive_thread = threading.Thread(target=_ping_loop, daemon=True)
+        self.keep_alive_thread.start()
+
     def stop(self):
+        self.keep_alive_running = False
         if self.server:
             self.server.shutdown()
             self.server.server_close()
