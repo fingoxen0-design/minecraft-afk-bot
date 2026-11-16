@@ -21,6 +21,7 @@ class VoteTracker:
             "last_vote_timestamp": 0,
             "next_vote_timestamp": 0,
             "cooldown_hours": default_cooldown_hours,
+            "vote_url": "",
             "alert_sent": False,
             "total_votes_recorded": 0
         }
@@ -144,6 +145,17 @@ class VoteTracker:
             raise ValueError("Cooldown hours must be positive (> 0)")
         with self._lock:
             self.state["cooldown_hours"] = float(hours)
+            self.save_state()
+
+    def get_vote_url(self, default_url: str = "") -> str:
+        """Saqlangan ovoz berish havolasini olish."""
+        with self._lock:
+            return self.state.get("vote_url") or default_url
+
+    def set_vote_url(self, url: str):
+        """Ovoz berish havolasini yangilash va saqlash."""
+        with self._lock:
+            self.state["vote_url"] = str(url).strip()
             self.save_state()
 
     def format_remaining_time(self) -> str:

@@ -15,7 +15,7 @@ class MinecraftVoteBot:
     def __init__(self):
         self.tracker = VoteTracker(default_cooldown_hours=config.COOLDOWN_HOURS)
         self.client = TelegramClient(token=config.TELEGRAM_BOT_TOKEN, default_chat_id=config.TELEGRAM_CHAT_ID)
-        self.vote_url = config.DEFAULT_VOTE_URL
+        self.vote_url = self.tracker.get_vote_url(default_url=config.DEFAULT_VOTE_URL)
         self.is_running = False
 
         # Yangi foydalanuvchilar va AFK bot menejerlari
@@ -64,7 +64,7 @@ class MinecraftVoteBot:
             ],
             [
                 {"text": "📊 AFK Holati", "callback_data": "afk_status"},
-                {"text": "⚙️ Minecraft Sozlamalari", "callback_data": "afk_settings"}
+                {"text": "⚙️ Sozlamalar", "callback_data": "bot_settings"}
             ]
         ]
 
@@ -151,6 +151,9 @@ class MinecraftVoteBot:
                 f"🎮 <b>Hozirgi AFK Bot Niki:</b> <code>{mc_conf.get('username')}</code>\n"
                 f"🌐 <b>Server:</b> <code>{mc_conf.get('host')}:{mc_conf.get('port')}</code> (Subserver: <code>{mc_conf.get('subserver')}</code>)\n\n"
                 "📋 <b>Mavjud Buyruqlar:</b>\n"
+                "• /settings — Barcha bot sozlamalari va ma'lumotlarini ko'rish\n"
+                "• /seturl [havola] — Ovoz berish sayti havolasini o'zgartirish\n"
+                "• /setcooldown [soat] — Taymer oraliq vaqtini o'zgartirish (masalan: 15)\n"
                 "• /afk_start — AFK botni ishga tushirish\n"
                 "• /afk_stop — AFK botni to'xtatish\n"
                 "• /afk_status — Bot holati va oxirgi loglarni ko'rish\n"
@@ -229,16 +232,45 @@ class MinecraftVoteBot:
                 msg = "❌ Masalan: <code>/setpass MaxfiyParol123</code> ko'rinishida yuboring."
             self.client.send_message(msg, chat_id=chat_id)
 
-        elif text.startswith("/setserver"):
-            parts = text.split()
-            if len(parts) > 1:
-                host = parts[1].strip()
-                port = parts[2].strip() if len(parts) > 2 else config.DEFAULT_MC_PORT
-                subserver = parts[3].strip() if len(parts) > 3 else config.DEFAULT_MC_SUBSERVER
-                self.user_manager.update_mc_config(chat_id, host=host, port=port, subserver=subserver)
-                msg = f"✅ Server sozlamalari yangilandi:\nHost: <code>{host}</code>\nPort: <code>{port}</code>\nSubserver: <code>{subserver}</code>"
+        elif text.startswith("/settings"):
+            mc_conf = self.user_manager.get_mc_config(chat_id)
+            cd_hours = self.tracker.state.get('cooldown_hours', config.COOLDOWN_HOURS)
+            msg = (
+                "⚙️ <b>Bot Ma'lumotlari va Sozlamalari:</b>\n\n"
+                f"🔗 <b>Ovoz berish / sayt havolasi:</b>\n<code>{self.vote_url}</code>\n"
+                f"<i>O'zgartirish:</i> <code>/seturl https://yangi-sayt...</code>\n\n"
+                f"⏱ <b>Taymer oraliq vaqti:</b> <code>{cd_hours} soat</code>\n"
+                f"<i>O'zgartirish:</i> <code>/setcooldown 15</code>\n\n"
+                f"🎮 <b>AFK Bot Niki:</b> <code>{mc_conf.get('username')}</code>\n"
+                f"<i>O'zgartirish:</i> <code>/setnick YangiNik</code>\n\n"
+                f"🔑 <b>Minecraft Paroli:</b> <code>{'O\'rnatilgan ✅' if mc_conf.get('password') else 'O\'rnatilmagan ⚠️'}</code>\n"
+                f"<i>O'zgartirish:</i> <code>/setpass YangiParol</code>\n\n"
+                f"🌐 <b>Server:</b> <code>{mc_conf.get('host')}:{mc_conf.get('port')}</code> (Subserver: <code>{mc_conf.get('subserver')}</code>)\n"
+                f"<i>O'zgartirish:</i> <code>/setserver host port subserver</code>\n\n"
+                f"⚡️ <b>Render Keep-Alive URL:</b>\n<code>https://minecraft-afk-bot-y7ak.onrender.com/health</code>"
+            )
+            self.client.send_message(msg, chat_id=chat_id, reply_markup=self.get_main_keyboard(chat_id))
+
+        elif text.startswith("/seturl") or text.startswith("/setvoteurl"):
+            if not self.is_authorized(chat_id):
+                self.client.send_message(
+                    "❌ <b>Ruxsat berilmagan!</b> Ushbu sozlamani faqat bot egasi o'zgartira oladi.",
+                    chat_id=chat_id
+                )
+                return
+
+            parts = text.split(maxsplit=1)
+            if len(parts) > 1 and parts[1].strip().startswith("http"):
+                new_url = parts[1].strip()
+                self.vote_url = new_url
+                self.tracker.set_vote_url(new_url)
+                msg = (
+                    "✅ <b>Ovoz berish sayti havolasi muvaffaqiyatli saqlandi!</b>\n\n"
+                    f"🔗 Yangi havola:\n<code>{self._escape_html(new_url)}</code>\n\n"
+                    "Barcha menyu tugmalari va eslatmalar endi shu havoladan foydalanadi."
+                )
             else:
-                msg = "❌ Masalan: <code>/setserver mc.uz 25565 economy</code>"
+                msg = "❌ Masalan: <code>/seturl https://minecraft-mp.com/server/350645/vote/</code> ko'rinishida yuboring."
             self.client.send_message(msg, chat_id=chat_id, reply_markup=self.get_main_keyboard(chat_id))
 
         # Ovoz berish buyruqlari
@@ -387,22 +419,9 @@ class MinecraftVoteBot:
             self.client.answer_callback_query(query_id, text="Holat tekshirilmoqda...")
             self.handle_message(chat_id, "/afk_status")
 
-        elif data == "afk_settings":
+        elif data in ["afk_settings", "bot_settings"]:
             self.client.answer_callback_query(query_id, text="Sozlamalar")
-            mc_conf = self.user_manager.get_mc_config(chat_id)
-            msg = (
-                "⚙️ <b>Sizning Minecraft AFK Bot sozlamalaringiz:</b>\n\n"
-                f"• Nik: <code>{mc_conf.get('username')}</code>\n"
-                f"• Server IP: <code>{mc_conf.get('host')}</code>\n"
-                f"• Port: <code>{mc_conf.get('port')}</code>\n"
-                f"• Subserver: <code>{mc_conf.get('subserver')}</code>\n"
-                f"• Parol: {'O\'rnatilgan ✅' if mc_conf.get('password') else 'O\'rnatilmagan ⚠️'}\n\n"
-                "O'zgartirish uchun buyruqlar:\n"
-                "• <code>/setnick YangiNik</code>\n"
-                "• <code>/setpass YangiParol</code>\n"
-                "• <code>/setserver mc.example.com 25565 economy</code>"
-            )
-            self.client.send_message(msg, chat_id=chat_id, reply_markup=self.get_main_keyboard(chat_id))
+            self.handle_message(chat_id, "/settings")
 
         elif data == "admin_panel":
             self.client.answer_callback_query(query_id, text="Admin panel")

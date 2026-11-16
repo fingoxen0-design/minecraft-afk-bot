@@ -198,6 +198,24 @@ class TestBot(unittest.TestCase):
             # send_message must NOT have been called
             self.bot.client.send_message.assert_not_called()
 
+    def test_settings_and_seturl_commands(self):
+        # /settings command
+        self.bot.handle_message("123456789", "/settings")
+        self.bot.client.send_message.assert_called_once()
+        msg = self.bot.client.send_message.call_args[0][0]
+        self.assertIn("Bot Ma'lumotlari va Sozlamalari", msg)
+
+        # /seturl command valid
+        new_url = "https://custom-site.com/vote"
+        self.bot.handle_message("123456789", f"/seturl {new_url}")
+        self.assertEqual(self.bot.vote_url, new_url)
+        self.assertEqual(self.bot.tracker.get_vote_url(), new_url)
+
+        # /seturl unauthorized
+        self.bot.handle_message("unauthorized_user", f"/seturl {new_url}")
+        last_msg = self.bot.client.send_message.call_args[0][0]
+        self.assertIn("Ruxsat berilmagan", last_msg)
+
     def test_stop(self):
         self.bot.is_running = True
         self.bot.stop()

@@ -116,6 +116,18 @@ class TestVoteTracker(unittest.TestCase):
         self.assertIn("soat", formatted)
         self.assertIn("daqiqa", formatted)
 
+    def test_get_and_set_vote_url(self):
+        default = "https://default.com"
+        self.assertEqual(self.tracker.get_vote_url(default), default)
+        
+        new_url = "https://new-vote-site.com/vote"
+        self.tracker.set_vote_url(new_url)
+        self.assertEqual(self.tracker.get_vote_url(), new_url)
+
+        # Check persistence
+        tracker2 = VoteTracker(state_file=self.test_file)
+        self.assertEqual(tracker2.get_vote_url(), new_url)
+
 if __name__ == "__main__":
     unittest.main()
 
