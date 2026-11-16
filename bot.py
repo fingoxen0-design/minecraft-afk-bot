@@ -13,15 +13,15 @@ from user_manager import UserManager
 from afk_manager import AFKManager
 
 class MinecraftVoteBot:
-    def __init__(self):
+    def __init__(self, user_manager: Optional[UserManager] = None, afk_manager: Optional[AFKManager] = None):
         self.tracker = VoteTracker(default_cooldown_hours=config.COOLDOWN_HOURS)
         self.client = TelegramClient(token=config.TELEGRAM_BOT_TOKEN, default_chat_id=config.TELEGRAM_CHAT_ID)
         self.vote_url = self.tracker.get_vote_url(default_url=config.DEFAULT_VOTE_URL)
         self.is_running = False
 
         # Yangi foydalanuvchilar va AFK bot menejerlari
-        self.user_manager = UserManager()
-        self.afk_manager = AFKManager()
+        self.user_manager = user_manager or UserManager()
+        self.afk_manager = afk_manager or AFKManager(user_manager=self.user_manager)
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=8, thread_name_prefix="tg_worker")
 
         # Monitoring / Health serverni sozlaymiz

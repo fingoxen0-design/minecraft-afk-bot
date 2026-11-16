@@ -214,7 +214,16 @@ class UserManager:
         with self._lock:
             self.get_or_create_user(cid)
             if self.users[cid].get("role") == "banned":
-                self.users[cid]["role"] = "trial"
+                now = time.time()
+                exp = self.users[cid].get("expires_at")
+                if self.is_admin(cid):
+                    self.users[cid]["role"] = "admin"
+                elif exp and exp > now:
+                    self.users[cid]["role"] = "premium"
+                elif exp and now >= exp:
+                    self.users[cid]["role"] = "expired"
+                else:
+                    self.users[cid]["role"] = "trial"
                 self.save()
                 return True, f"Foydalanuvchi <code>{cid}</code> blokdan chiqarildi."
             return False, "Ushbu foydalanuvchi bloklanmagan."

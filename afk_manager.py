@@ -46,6 +46,9 @@ class AFKBotSession:
                     msg = data.get("message", "")
                     self.last_message = msg
 
+                    # Forward to Python stdout for StdoutTee -> LogBuffer -> /logs
+                    print(f"[Mineflayer] [{self.user_id}] {msg}")
+
                     if event_type == "status":
                         self.status = msg
                         if msg == "in_economy":
@@ -84,6 +87,7 @@ class AFKBotSession:
                     self.recent_logs.append(f"[{time.strftime('%H:%M:%S')}] {line_str}")
                     if len(self.recent_logs) > 15:
                         self.recent_logs.pop(0)
+                    print(f"[Mineflayer] [{self.user_id}] {line_str}")
         except Exception as e:
             print(f"[AFKBotSession] Stdout o'qishda ogohlantirish: {e}")
         finally:
@@ -210,9 +214,17 @@ class AFKBotSession:
 class AFKManager:
     """Barcha foydalanuvchilarning AFK bot sessiyalarini boshqaruvchi markaziy menejer."""
 
-    def __init__(self):
+    def __init__(self, user_manager: Optional[Any] = None):
         self.sessions: Dict[str, AFKBotSession] = {}
         self._lock = threading.Lock()
+        if user_manager is None:
+            try:
+                from user_manager import UserManager
+                self.user_manager = UserManager()
+            except Exception:
+                self.user_manager = None
+        else:
+            self.user_manager = user_manager
 
     def get_active_count(self) -> int:
         """Hozirda faol botlar soni."""
@@ -227,9 +239,16 @@ class AFKManager:
             if uid in self.sessions and self.sessions[uid].is_running:
                 return False, "Sizning AFK botingiz allaqachon ishlab turibdi."
 
-            # Max faol botlar cheklovi (1-2 ta)
+            # Max faol botlar cheklovi (1-2 ta) (Adminlar cheklovdan ozod)
+            is_admin = False
+            if hasattr(self, 'user_manager') and self.user_manager:
+                try:
+                    is_admin = self.user_manager.is_admin(uid)
+                except Exception:
+                    is_admin = False
+
             active_cnt = sum(1 for s in self.sessions.values() if s.is_running)
-            if active_cnt >= config.MAX_ACTIVE_BOTS:
+            if not is_admin and active_cnt >= config.MAX_ACTIVE_BOTS:
                 return False, f"Serverda maksimal faol botlar soni ({config.MAX_ACTIVE_BOTS} ta) to'lgan. Birozdan so'ng urinib ko'ring."
 
             session = AFKBotSession(uid, mc_config)

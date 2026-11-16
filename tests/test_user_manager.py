@@ -102,6 +102,21 @@ class TestUserManager(unittest.TestCase):
         can_use2, _ = self.manager.can_use_bot(user_id)
         self.assertTrue(can_use2)
 
+    def test_unban_user_preserves_premium_status(self):
+        user_id = "77889900"
+        self.manager.get_or_create_user(user_id)
+        self.manager.grant_premium(user_id, 10)
+        self.assertEqual(self.manager.users[user_id]["role"], "premium")
+
+        # Ban premium user
+        self.manager.ban_user(user_id)
+        self.assertEqual(self.manager.users[user_id]["role"], "banned")
+
+        # Unban user while premium is still active
+        ok, res = self.manager.unban_user(user_id)
+        self.assertTrue(ok)
+        self.assertEqual(self.manager.users[user_id]["role"], "premium")
+
     def test_get_stats(self):
         self.manager.get_or_create_user("u1")
         self.manager.grant_premium("u2", 10)

@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 import os
 import time
 from bot import MinecraftVoteBot
+from user_manager import UserManager
 import config
 
 class TestBot(unittest.TestCase):
@@ -10,6 +11,10 @@ class TestBot(unittest.TestCase):
         self.test_state_file = "test_bot_state.json"
         if os.path.exists(self.test_state_file):
             os.remove(self.test_state_file)
+
+        self.test_users_file = "test_bot_users.json"
+        if os.path.exists(self.test_users_file):
+            os.remove(self.test_users_file)
 
         # Patch config values for clean test isolation
         self.config_token_patch = patch.object(config, "TELEGRAM_BOT_TOKEN", "mock_bot_token")
@@ -24,7 +29,8 @@ class TestBot(unittest.TestCase):
         self.config_port_patch.start()
         self.config_admins_patch.start()
 
-        self.bot = MinecraftVoteBot()
+        self.test_user_manager = UserManager(db_path=self.test_users_file)
+        self.bot = MinecraftVoteBot(user_manager=self.test_user_manager)
         self.bot.tracker.state_file = self.bot.tracker.state_file.with_name(self.test_state_file)
         self.bot.client.send_message = MagicMock(return_value=True)
         self.bot.client.answer_callback_query = MagicMock(return_value=True)
@@ -39,6 +45,8 @@ class TestBot(unittest.TestCase):
         self.config_admins_patch.stop()
         if os.path.exists(self.test_state_file):
             os.remove(self.test_state_file)
+        if os.path.exists(self.test_users_file):
+            os.remove(self.test_users_file)
 
     def test_init(self):
         self.assertEqual(self.bot.vote_url, "https://minecraft-mp.com/server/350645/vote/?ref=bot&tracker=1")

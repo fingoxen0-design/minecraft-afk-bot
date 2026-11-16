@@ -71,6 +71,31 @@ class TestAFKManager(unittest.TestCase):
 
     @patch.object(AFKBotSession, "_read_output", lambda self: None)
     @patch("subprocess.Popen")
+    def test_max_active_bots_admin_exempt(self, mock_popen):
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+
+        admin_id = "admin_user_99"
+        mock_um = MagicMock()
+        mock_um.is_admin.side_effect = lambda uid: uid == admin_id
+        manager = AFKManager(user_manager=mock_um)
+
+        with patch.object(config, "MAX_ACTIVE_BOTS", 2):
+            s1, _ = manager.start_user_bot("u1", {"username": "B1"})
+            s2, _ = manager.start_user_bot("u2", {"username": "B2"})
+            self.assertTrue(s1)
+            self.assertTrue(s2)
+            self.assertEqual(manager.get_active_count(), 2)
+
+            # Admin user should be exempted from MAX_ACTIVE_BOTS limit
+            s_admin, msg_admin = manager.start_user_bot(admin_id, {"username": "AdminBot"})
+            self.assertTrue(s_admin)
+            self.assertEqual(manager.get_active_count(), 3)
+            manager.stop_all()
+
+    @patch.object(AFKBotSession, "_read_output", lambda self: None)
+    @patch("subprocess.Popen")
     def test_send_chat_functionality(self, mock_popen):
         mock_proc = MagicMock()
         mock_proc.poll.return_value = None
