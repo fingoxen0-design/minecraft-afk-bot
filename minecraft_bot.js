@@ -50,7 +50,7 @@ function parseArgs() {
     port: parseInt(process.env.DEFAULT_MC_PORT || '25565', 10),
     username: process.env.DEFAULT_MC_USERNAME || 'Gotto',
     password: process.env.DEFAULT_MC_PASSWORD || 'bunyod',
-    version: process.env.DEFAULT_MC_VERSION || false, // auto-detect or version string
+    version: process.env.DEFAULT_MC_VERSION || '1.21.4', // auto-detect or version string
     subserver: process.env.DEFAULT_MC_SUBSERVER || 'economy',
     antiKick: true,
     reconnect: true,
@@ -157,6 +157,8 @@ function resolveVersion(callback) {
         const proto = res.version.protocol;
         const protoMap = {
           775: '1.21.1',
+          769: '1.21.4',
+          768: '1.21.3',
           767: '1.21',
           765: '1.20.4',
           764: '1.20.2',
@@ -170,7 +172,7 @@ function resolveVersion(callback) {
           return safeCallback(res.version.name);
         }
       }
-      return safeCallback('1.21.1');
+      return safeCallback('1.21.4');
     });
   } catch (err) {
     safeCallback('1.21.1');

@@ -66,7 +66,7 @@ MAX_ACTIVE_BOTS = _get_int("MAX_ACTIVE_BOTS", 2)
 # Minecraft AFK Bot sozlamalari
 DEFAULT_MC_HOST = os.getenv("DEFAULT_MC_HOST", "allaysmp.pro")
 DEFAULT_MC_PORT = _get_int("DEFAULT_MC_PORT", 25565)
-DEFAULT_MC_VERSION = os.getenv("DEFAULT_MC_VERSION", "1.21.1")
+DEFAULT_MC_VERSION = os.getenv("DEFAULT_MC_VERSION", "1.21.4")
 DEFAULT_MC_SUBSERVER = os.getenv("DEFAULT_MC_SUBSERVER", "economy")
 DEFAULT_MC_USERNAME = os.getenv("DEFAULT_MC_USERNAME", "Gotto")
 DEFAULT_MC_PASSWORD = os.getenv("DEFAULT_MC_PASSWORD", "bunyod")
