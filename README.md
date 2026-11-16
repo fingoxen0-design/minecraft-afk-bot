@@ -98,9 +98,25 @@ pm2 start ecosystem.config.js
 pm2 save
 ```
 
-### 2-variant: Linux VPS / Docker orqali
+### 2-variant: Linux VPS / Serverga 1-klikda joylashtirish (Tavsiya etiladi)
+
+Serveringiz (Ubuntu/Debian) terminaliga kiring va loyiha papkasida quyidagilarni bajaring:
 ```bash
-docker compose up -d vote-bot
+git clone <REPOSITORIY_LINKI>
+cd bot
+sudo bash deploy.sh
+```
+Ushbu skript avtomatik tarzda:
+- Dockerni tekshiradi va o'rnatadi;
+- `.env` sozlamalarini yaratadi;
+- Botni fonga (background) olib, 24/7 rejimida uzluksiz ishga tushiradi!
+
+Konteyner holati va loglarni boshqarish:
+```bash
+docker compose ps               # Holatni tekshirish
+docker compose logs -f vote-bot # Jonli loglarni ko'rish
+docker compose restart          # Qayta ishga tushirish
+docker compose down             # To'xtatish
 ```
 
 ### 3-variant: Linux Systemd Xizmati orqali
