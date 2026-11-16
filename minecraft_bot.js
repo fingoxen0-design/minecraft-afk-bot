@@ -120,23 +120,47 @@ let hasLoggedIn = false;
 let spawnCount = 0;
 let isWorldTransferring = false;
 
-// Safe chat packet wrapper ensuring play state
+// Safe chat packet wrapper ensuring play state and multi-method delivery
 function safeChat(text) {
   if (!bot || !bot._client || bot._client.state !== 'play' || isStopping || isWorldTransferring) {
     return false;
   }
+  let sent = false;
   try {
     if (typeof bot.chat === 'function') {
       bot.chat(text);
-      return true;
-    } else if (typeof bot._client.chat === 'function') {
-      bot._client.chat(text);
-      return true;
+      sent = true;
     }
-  } catch (err) {
-    sendIPC('error', `Chat error: ${err.message}`);
+  } catch (_) {}
+
+  // Direct packet fallback for commands starting with /
+  if (text.startsWith('/')) {
+    const cmd = text.slice(1);
+    try {
+      bot._client.write('chat_command', {
+        command: cmd,
+        timestamp: BigInt(Date.now()),
+        salt: 0n,
+        argumentSignatures: [],
+        signedPreview: false,
+        messageCount: 0,
+        acknowledged: Buffer.alloc(3)
+      });
+      sent = true;
+    } catch (_) {}
+    try {
+      bot._client.write('chat', { message: text });
+      sent = true;
+    } catch (_) {}
+  } else {
+    try {
+      if (typeof bot._client.chat === 'function') {
+        bot._client.chat(text);
+        sent = true;
+      }
+    } catch (_) {}
   }
-  return false;
+  return sent;
 }
 
 function resolveVersion(callback) {
@@ -211,28 +235,37 @@ function createBot() {
 
       // Immediate authentication on protocol login to prevent 20s captcha/auth timeout kick
       if (config.password && !hasLoggedIn) {
-        setTimeout(() => {
-          if (!hasLoggedIn && bot && !isStopping) {
-            sendIPC('info', 'Sending login credentials on protocol login...');
-            safeChat(`/login ${config.password}`);
-            // Quick register fallback if account is not registered yet
-            setTimeout(() => {
-              if (!hasLoggedIn && bot && !isStopping) {
-                safeChat(`/register ${config.password} ${config.password}`);
-              }
-            }, 1000);
+        let authAttempt = 0;
+        const authInterval = setInterval(() => {
+          if (hasLoggedIn || isStopping || !bot || authAttempt >= 5) {
+            clearInterval(authInterval);
+            return;
           }
-        }, 1200);
+          authAttempt++;
+          sendIPC('info', `Sending login credentials (attempt ${authAttempt})...`);
+          safeChat(`/login ${config.password}`);
+          safeChat(`/register ${config.password} ${config.password}`);
+
+          // Anti-bot human-like micro action
+          try {
+            if (typeof bot.swingArm === 'function') bot.swingArm('right');
+            if (bot.entity) {
+              const delta = (Math.random() - 0.5) * 0.1;
+              bot.look(bot.entity.yaw + delta, bot.entity.pitch, true);
+            }
+          } catch (_) {}
+        }, 1500);
       }
     });
 
-    // Velocity 1.7.2 configuration transition handling
+    // Velocity 1.7.2 configuration transition & packet inspection handling
     if (bot._client) {
       bot._client.on('packet', (data, meta) => {
-        if (meta && meta.name === 'start_configuration') {
+        const name = meta ? meta.name : '';
+        if (name === 'start_configuration') {
           isWorldTransferring = true;
           sendIPC('info', 'World transfer initiated by proxy...');
-        } else if (meta && meta.name === 'finish_configuration') {
+        } else if (name === 'finish_configuration') {
           sendIPC('server_change', 'Server configuration finished');
           if (isWorldTransferring) {
             isWorldTransferring = false;
@@ -241,6 +274,24 @@ function createBot() {
             setTimeout(() => {
               triggerAfk();
             }, 3000);
+          }
+        } else if (['open_window', 'set_slot', 'set_title_text', 'set_action_bar_text', 'boss_bar', 'kick_disconnect'].includes(name)) {
+          let summary = '';
+          try { summary = JSON.stringify(data).slice(0, 140); } catch (_) {}
+          sendIPC('info', `[PACKET:${name}] ${summary}`);
+
+          // Auto-solve GUI Captcha if inventory window opens
+          if (name === 'open_window' && data) {
+            setTimeout(() => {
+              if (bot && bot.currentWindow) {
+                const items = bot.currentWindow.items();
+                const target = items.find(i => i.name.includes('green') || i.name.includes('lime') || i.name.includes('emerald') || i.name.includes('wool') || i.name.includes('star'));
+                if (target) {
+                  sendIPC('info', `Clicking GUI captcha item: slot ${target.slot} (${target.name})`);
+                  bot.clickWindow(target.slot, 0, 0);
+                }
+              }
+            }, 1000);
           }
         }
       });
