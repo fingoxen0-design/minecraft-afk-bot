@@ -603,6 +603,8 @@ class MinecraftVoteBot:
                 # 3. Adminlar uchun 24/7 avtomatik qayta tiklash (Auto-AFK watchdog)
                 if getattr(config, "AUTO_AFK_ON_BOOT", True):
                     for admin_id in config.ADMIN_USER_IDS:
+                        if self.afk_manager.is_manually_stopped(admin_id):
+                            continue
                         status = self.afk_manager.get_user_status(admin_id)
                         if not status or status.get("status") in ["stopped", "error"]:
                             mc_conf = self.user_manager.get_mc_config(admin_id)

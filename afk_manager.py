@@ -25,6 +25,7 @@ class AFKBotSession:
         self.food: Optional[float] = None
         self._reader_thread: Optional[threading.Thread] = None
         self.is_running = False
+        self.manual_stopped = False
 
     def _read_output(self):
         """Node.js botining stdout chiqishini qatorba-qator o'qish va tahlil qilish."""
@@ -120,6 +121,7 @@ class AFKBotSession:
                 cwd=str(Path(__file__).resolve().parent)
             )
             self.is_running = True
+            self.manual_stopped = False
             self.status = "connecting"
             self.started_at = time.time()
             self.recent_logs = [f"[{time.strftime('%H:%M:%S')}] Jarayon ishga tushirildi..."]
@@ -158,6 +160,7 @@ class AFKBotSession:
         self.status = "stopped"
         self.is_running = False
         self.is_afk = False
+        self.manual_stopped = True
         return True, "AFK Bot to'xtatildi."
 
     def send_chat(self, text: str) -> bool:
@@ -192,6 +195,7 @@ class AFKBotSession:
             "last_message": self.last_message,
             "username": self.mc_config.get("username"),
             "host": self.mc_config.get("host"),
+            "manual_stopped": self.manual_stopped,
             "recent_logs": self.recent_logs[-5:]
         }
 
@@ -245,6 +249,13 @@ class AFKManager:
             if session:
                 return session.get_info()
             return None
+
+    def is_manually_stopped(self, user_id: str | int) -> bool:
+        """Foydalanuvchi botni o'zi qo'lda to'xtatganmi?"""
+        uid = str(user_id)
+        with self._lock:
+            session = self.sessions.get(uid)
+            return session.manual_stopped if session else False
 
     def send_user_chat(self, user_id: str | int, text: str) -> Tuple[bool, str]:
         """Foydalanuvchi nomidan Minecraft serveriga xabar yoki buyruq yuborish."""

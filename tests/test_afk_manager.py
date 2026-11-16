@@ -88,5 +88,23 @@ class TestAFKManager(unittest.TestCase):
         fail_ok, fail_res = self.manager.send_user_chat("u_offline", "Salom")
         self.assertFalse(fail_ok)
 
+    @patch.object(AFKBotSession, "_read_output", lambda self: None)
+    @patch("subprocess.Popen")
+    def test_manual_stopped_flag(self, mock_popen):
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+
+        self.assertFalse(self.manager.is_manually_stopped("u_test"))
+        self.manager.start_user_bot("u_test", {"username": "BotTest"})
+        self.assertFalse(self.manager.is_manually_stopped("u_test"))
+
+        self.manager.stop_user_bot("u_test")
+        self.assertTrue(self.manager.is_manually_stopped("u_test"))
+
+        # Starting again resets manual_stopped
+        self.manager.start_user_bot("u_test", {"username": "BotTest"})
+        self.assertFalse(self.manager.is_manually_stopped("u_test"))
+
 if __name__ == "__main__":
     unittest.main()
