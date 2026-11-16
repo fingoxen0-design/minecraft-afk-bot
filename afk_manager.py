@@ -66,6 +66,8 @@ class AFKBotSession:
                     elif event_type == "kicked":
                         self.status = "kicked"
                         self.is_afk = False
+                        if "captcha" in msg.lower():
+                            msg = "Serverdan chiqarildi: Captcha/Login vaqti o'tib ketdi"
 
                     elif event_type == "error":
                         if self.status != "reconnecting":

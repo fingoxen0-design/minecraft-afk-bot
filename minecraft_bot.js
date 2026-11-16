@@ -118,15 +118,19 @@ let currentServer = 'hub';
 let isAfkActive = false;
 let hasLoggedIn = false;
 let spawnCount = 0;
+let isWorldTransferring = false;
 
 // Safe chat packet wrapper ensuring play state
 function safeChat(text) {
-  if (!bot || !bot._client || bot._client.state !== 'play' || isStopping) {
+  if (!bot || !bot._client || bot._client.state !== 'play' || isStopping || isWorldTransferring) {
     return false;
   }
   try {
     if (typeof bot.chat === 'function') {
       bot.chat(text);
+      return true;
+    } else if (typeof bot._client.chat === 'function') {
+      bot._client.chat(text);
       return true;
     }
   } catch (err) {
@@ -202,17 +206,40 @@ function createBot() {
     bot.on('login', () => {
       reconnectAttempts = 0;
       sendIPC('status', 'logged_in', { username: bot.username });
+
+      // Immediate authentication on protocol login to prevent 20s captcha/auth timeout kick
+      if (config.password && !hasLoggedIn) {
+        setTimeout(() => {
+          if (!hasLoggedIn && bot && !isStopping) {
+            sendIPC('info', 'Sending login credentials on protocol login...');
+            safeChat(`/login ${config.password}`);
+            // Quick register fallback if account is not registered yet
+            setTimeout(() => {
+              if (!hasLoggedIn && bot && !isStopping) {
+                safeChat(`/register ${config.password} ${config.password}`);
+              }
+            }, 1000);
+          }
+        }, 1200);
+      }
     });
 
     // Velocity 1.7.2 configuration transition handling
     if (bot._client) {
       bot._client.on('packet', (data, meta) => {
-        if (meta && meta.name === 'finish_configuration') {
-          sendIPC('server_change', 'Server configuration finished (world transfer detected)');
-          setTimeout(() => {
-            if (!bot || !bot._client || bot._client.state !== 'play' || isStopping) return;
-            safeChat('/server');
-          }, 3000);
+        if (meta && meta.name === 'start_configuration') {
+          isWorldTransferring = true;
+          sendIPC('info', 'World transfer initiated by proxy...');
+        } else if (meta && meta.name === 'finish_configuration') {
+          sendIPC('server_change', 'Server configuration finished');
+          if (isWorldTransferring) {
+            isWorldTransferring = false;
+            currentServer = config.subserver;
+            sendIPC('status', 'in_economy', { server: config.subserver });
+            setTimeout(() => {
+              triggerAfk();
+            }, 3000);
+          }
         }
       });
     }
@@ -224,12 +251,12 @@ function createBot() {
       // Smart Auth fallback: send /login after delay if prompt not caught
       if (!hasLoggedIn && config.password) {
         setTimeout(() => {
-          if (!hasLoggedIn && bot && !isStopping) {
-            sendIPC('info', 'Sending login credentials (fallback)...');
+          if (!hasLoggedIn && bot && !isStopping && !isWorldTransferring) {
+            sendIPC('info', 'Sending login credentials (spawn fallback)...');
             safeChat(`/login ${config.password}`);
             hasLoggedIn = true;
           }
-        }, 2000);
+        }, 1500);
       }
 
       // Subserver handling
@@ -242,22 +269,14 @@ function createBot() {
             sendIPC('status', 'in_economy', { server: config.subserver });
           }
           triggerAfk();
-        }, 3000);
-      } else if (config.subserver && currentServer !== config.subserver) {
+        }, 2500);
+      } else if (hasLoggedIn && config.subserver && currentServer !== config.subserver && !isWorldTransferring) {
         setTimeout(() => {
-          if (currentServer !== config.subserver && !isStopping) {
+          if (currentServer !== config.subserver && !isStopping && !isWorldTransferring) {
             sendIPC('info', `Requesting server switch: /server ${config.subserver}`);
             safeChat(`/server ${config.subserver}`);
-
-            // Verification query & GUI selector fallback after 4 seconds
-            setTimeout(() => {
-              if (currentServer !== config.subserver && !isStopping) {
-                safeChat('/server');
-                tryGuiSelectorFallback();
-              }
-            }, 4000);
           }
-        }, 3500);
+        }, 2000);
       } else if (currentServer === config.subserver && !isAfkActive) {
         triggerAfk();
       }
@@ -309,13 +328,32 @@ function createBot() {
         sendIPC('status', 'afk_active', { server: currentServer });
       }
 
+      // Auth confirmation detection
+      if (lower.includes('you have successfully logged') || 
+          lower.includes('successfully logged in') ||
+          lower.includes('your login session has been continued') ||
+          lower.includes('you are already logged in')) {
+        hasLoggedIn = true;
+        sendIPC('info', 'Authentication successful / session confirmed.');
+        
+        // Switch to subserver if target is specified and not lobby
+        const targetSub = config.subserver ? config.subserver.toLowerCase() : '';
+        if (targetSub && targetSub !== 'lobby' && targetSub !== 'hub' && currentServer !== config.subserver) {
+          setTimeout(() => {
+            if (currentServer !== config.subserver && !isStopping) {
+              sendIPC('info', `Switching to subserver: /server ${config.subserver}`);
+              safeChat(`/server ${config.subserver}`);
+            }
+          }, 1500);
+        }
+      }
+
       // Smart Auth: respond cleanly to prompts without sending both in the same tick
       if (lower.includes('/register') && !hasLoggedIn && config.password) {
         setTimeout(() => {
           if (!hasLoggedIn && bot && !isStopping) {
             sendIPC('info', 'Executing registration...');
             safeChat(`/register ${config.password} ${config.password}`);
-            hasLoggedIn = true;
           }
         }, 800);
       } else if (lower.includes('/login') && !hasLoggedIn && config.password) {
@@ -323,7 +361,6 @@ function createBot() {
           if (!hasLoggedIn && bot && !isStopping) {
             sendIPC('info', 'Executing login...');
             safeChat(`/login ${config.password}`);
-            hasLoggedIn = true;
           }
         }, 800);
       }
@@ -416,15 +453,9 @@ function createBot() {
           const newYaw = bot.entity.yaw + yawDelta;
           bot.look(newYaw, bot.entity.pitch, true);
 
-          // Small jump occasionally if on ground
-          if (bot.entity.onGround && Math.random() > 0.7) {
-            bot.setControlState('jump', true);
-            setTimeout(() => {
-              if (bot && bot._client && bot._client.state === 'play') {
-                bot.setControlState('jump', false);
-              }
-            }, 300);
-          }
+          // Gentle head pitch adjustment
+          const pitchDelta = (Math.random() - 0.5) * 0.1;
+          bot.look(newYaw, bot.entity.pitch + pitchDelta, true);
           sendIPC('info', 'Anti-kick heartbeat pulse sent');
         } catch (err) {
           // Ignore rotation/action errors if entity not ready
@@ -434,6 +465,16 @@ function createBot() {
 
     bot.on('kicked', (reason) => {
       let reasonText = typeof reason === 'string' ? reason : JSON.stringify(reason);
+      try {
+        const parsed = typeof reason === 'object' ? reason : JSON.parse(reason);
+        if (parsed.value && parsed.value.extra && parsed.value.extra.value && parsed.value.extra.value.value) {
+          const list = parsed.value.extra.value.value;
+          const textParts = list.map(item => (item.text && item.text.value) ? item.text.value : '').join('');
+          if (textParts.trim()) reasonText = textParts.trim().replace(/\n+/g, ' ');
+        } else if (parsed.text) {
+          reasonText = typeof parsed.text === 'string' ? parsed.text : JSON.stringify(parsed.text);
+        }
+      } catch (_) {}
       sendIPC('kicked', `Kicked from server: ${reasonText}`);
       cleanupBot();
       scheduleReconnect();
@@ -460,6 +501,7 @@ function cleanupBot() {
   }
   isAfkActive = false;
   hasLoggedIn = false;
+  isWorldTransferring = false;
   if (bot) {
     try {
       bot.removeAllListeners();
