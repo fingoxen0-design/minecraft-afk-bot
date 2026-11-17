@@ -22,6 +22,8 @@ class MinecraftVoteBot:
         # Yangi foydalanuvchilar va AFK bot menejerlari
         self.user_manager = user_manager or UserManager()
         self.afk_manager = afk_manager or AFKManager(user_manager=self.user_manager)
+        if hasattr(self.afk_manager, "set_kick_callback"):
+            self.afk_manager.set_kick_callback(self.on_bot_kicked)
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=8, thread_name_prefix="tg_worker")
 
         # Monitoring / Health serverni sozlaymiz
@@ -34,6 +36,24 @@ class MinecraftVoteBot:
     def _escape_html(self, text: str) -> str:
         """Telegram HTML parse_mode uchun maxsus belgilarni xavfsizlashtirish."""
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    def on_bot_kicked(self, user_id: str, kick_reason: str):
+        """Bot serverdan kick bo'lganda zudlik bilan Telegram chatga xabar yuborish."""
+        safe_reason = self._escape_html(kick_reason)
+        safe_uid = self._escape_html(str(user_id))
+        alert_text = (
+            "🚨 <b>OGOHLANTIRISH: Minecraft AFK Bot serverdan KICK qilindi!</b>\n\n"
+            f"• <b>Foydalanuvchi:</b> <code>{safe_uid}</code>\n"
+            f"• <b>Kick sababi:</b> <code>{safe_reason}</code>\n\n"
+            "🛑 <b>2-urinish to'xtatildi:</b> Bot qayta ulanishga yuborilmadi. "
+            "Serverdan chiqarib yuborilish sababini tekshirib, muammoni hal qilgach qayta ishga tushirishingiz mumkin."
+        )
+        try:
+            self.client.send_message(alert_text, chat_id=user_id)
+            if str(user_id) != str(config.TELEGRAM_CHAT_ID) and config.TELEGRAM_CHAT_ID:
+                self.client.send_message(alert_text, chat_id=config.TELEGRAM_CHAT_ID)
+        except Exception as e:
+            print(f"[Bot] Kick xabarnomasini yuborishda xato: {e}")
 
     def is_authorized(self, chat_id: str | int) -> bool:
         """Ovoz berish administrativ buyruqlari uchun bot egasi tekshiruvi."""
@@ -613,6 +633,8 @@ class MinecraftVoteBot:
                         if self.afk_manager.is_manually_stopped(admin_id):
                             continue
                         status = self.afk_manager.get_user_status(admin_id)
+                        if status and status.get("status") == "kicked":
+                            continue
                         if not status or status.get("status") in ["stopped", "error"]:
                             mc_conf = self.user_manager.get_mc_config(admin_id)
                             if mc_conf and mc_conf.get("username"):

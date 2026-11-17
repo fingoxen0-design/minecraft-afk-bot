@@ -11,9 +11,10 @@ import config
 class AFKBotSession:
     """Yagona foydalanuvchining Minecraft AFK bot jarayoni (process) sessiyasi."""
 
-    def __init__(self, user_id: str, mc_config: Dict[str, Any]):
+    def __init__(self, user_id: str, mc_config: Dict[str, Any], on_kick_callback: Optional[Any] = None):
         self.user_id = str(user_id)
         self.mc_config = mc_config
+        self.on_kick_callback = on_kick_callback
         self.process: Optional[subprocess.Popen] = None
         self.status = "stopped"  # stopped, connecting, logged_in, in_economy, afk_active, reconnecting, error
         self.last_message = ""
@@ -66,8 +67,15 @@ class AFKBotSession:
                     elif event_type == "kicked":
                         self.status = "kicked"
                         self.is_afk = False
-                        if "captcha" in msg.lower():
-                            msg = "Serverdan chiqarildi: Captcha/Login vaqti o'tib ketdi"
+                        self.manual_stopped = True  # Prevent 2nd reconnect attempt
+                        kick_msg = msg
+                        if "captcha" in kick_msg.lower():
+                            kick_msg = "Serverdan chiqarildi: Captcha/Login vaqti o'tib ketdi"
+                        if self.on_kick_callback:
+                            try:
+                                self.on_kick_callback(self.user_id, kick_msg)
+                            except Exception as e:
+                                print(f"[AFKBotSession] Kick callback xatosi: {e}")
 
                     elif event_type == "error":
                         if self.status != "reconnecting":
@@ -216,8 +224,9 @@ class AFKBotSession:
 class AFKManager:
     """Barcha foydalanuvchilarning AFK bot sessiyalarini boshqaruvchi markaziy menejer."""
 
-    def __init__(self, user_manager: Optional[Any] = None):
+    def __init__(self, user_manager: Optional[Any] = None, on_kick_callback: Optional[Any] = None):
         self.sessions: Dict[str, AFKBotSession] = {}
+        self.on_kick_callback = on_kick_callback
         self._lock = threading.Lock()
         if user_manager is None:
             try:
@@ -227,6 +236,16 @@ class AFKManager:
                 self.user_manager = None
         else:
             self.user_manager = user_manager
+
+    def set_kick_callback(self, callback: Any):
+        self.on_kick_callback = callback
+
+    def _on_session_kicked(self, user_id: str, msg: str):
+        if self.on_kick_callback:
+            try:
+                self.on_kick_callback(user_id, msg)
+            except Exception as e:
+                print(f"[AFKManager] Kick callback xatosi: {e}")
 
     def get_active_count(self) -> int:
         """Hozirda faol botlar soni."""
@@ -255,7 +274,7 @@ class AFKManager:
             if not is_admin and active_cnt >= config.MAX_ACTIVE_BOTS:
                 return False, f"Serverda maksimal faol botlar soni ({config.MAX_ACTIVE_BOTS} ta) to'lgan. Birozdan so'ng urinib ko'ring."
 
-            session = AFKBotSession(uid, mc_config)
+            session = AFKBotSession(uid, mc_config, on_kick_callback=self._on_session_kicked)
             session.status = "connecting"
             session.is_running = True
             self.sessions[uid] = session

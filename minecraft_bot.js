@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const mineflayer = require('mineflayer');
 const mc = require('minecraft-protocol');
 
@@ -119,48 +120,45 @@ let isAfkActive = false;
 let hasLoggedIn = false;
 let spawnCount = 0;
 let isWorldTransferring = false;
+let isCaptchaPending = false;
+let lastSolvedMapHash = null;
+let lastSolvedMapTime = 0;
+let lastMapProcessTime = 0;
+let lastSubmittedChatCaptcha = '';
+let lastSubmittedChatCaptchaTime = 0;
 
-// Safe chat packet wrapper ensuring play state and multi-method delivery
+// Managed timers to prevent ghost callbacks across reconnects
+const activeTimers = new Set();
+function safeTimeout(fn, ms) {
+  const t = setTimeout(() => {
+    activeTimers.delete(t);
+    try { fn(); } catch (_) {}
+  }, ms);
+  activeTimers.add(t);
+  return t;
+}
+function clearAllPendingTimers() {
+  for (const t of activeTimers) {
+    clearTimeout(t);
+    clearInterval(t);
+  }
+  activeTimers.clear();
+}
+
+// Safe chat packet wrapper ensuring play state and native mineflayer delivery
 function safeChat(text) {
   if (!bot || !bot._client || bot._client.state !== 'play' || isStopping || isWorldTransferring) {
     return false;
   }
-  let sent = false;
   try {
     if (typeof bot.chat === 'function') {
       bot.chat(text);
-      sent = true;
+      return true;
     }
-  } catch (_) {}
-
-  // Direct packet fallback for commands starting with /
-  if (text.startsWith('/')) {
-    const cmd = text.slice(1);
-    try {
-      bot._client.write('chat_command', {
-        command: cmd,
-        timestamp: BigInt(Date.now()),
-        salt: 0n,
-        argumentSignatures: [],
-        signedPreview: false,
-        messageCount: 0,
-        acknowledged: Buffer.alloc(3)
-      });
-      sent = true;
-    } catch (_) {}
-    try {
-      bot._client.write('chat', { message: text });
-      sent = true;
-    } catch (_) {}
-  } else {
-    try {
-      if (typeof bot._client.chat === 'function') {
-        bot._client.chat(text);
-        sent = true;
-      }
-    } catch (_) {}
+  } catch (err) {
+    sendIPC('error', `Chat error: ${err.message}`);
   }
-  return sent;
+  return false;
 }
 
 function resolveVersion(callback) {
@@ -203,105 +201,445 @@ function resolveVersion(callback) {
   }
 }
 
+// Standard 8x12 digit templates for normalized grid matching
+const DIGIT_TEMPLATES = {
+  '0': [
+    "01111110",
+    "11111111",
+    "11000011",
+    "11000011",
+    "11000011",
+    "11000011",
+    "11000011",
+    "11000011",
+    "11000011",
+    "11000011",
+    "11111111",
+    "01111110"
+  ],
+  '1': [
+    "00011000",
+    "00111000",
+    "01111000",
+    "00011000",
+    "00011000",
+    "00011000",
+    "00011000",
+    "00011000",
+    "00011000",
+    "00011000",
+    "01111110",
+    "01111110"
+  ],
+  '2': [
+    "01111110",
+    "11111111",
+    "11000011",
+    "00000011",
+    "00000110",
+    "00011100",
+    "00111000",
+    "01110000",
+    "11000000",
+    "11000011",
+    "11111111",
+    "11111111"
+  ],
+  '3': [
+    "01111110",
+    "11111111",
+    "00000011",
+    "00000011",
+    "00011110",
+    "00011110",
+    "00000011",
+    "00000011",
+    "00000011",
+    "11000011",
+    "11111111",
+    "01111110"
+  ],
+  '4': [
+    "00001110",
+    "00011110",
+    "00110110",
+    "01100110",
+    "11000110",
+    "11000110",
+    "11111111",
+    "11111111",
+    "00000110",
+    "00000110",
+    "00000110",
+    "00000110"
+  ],
+  '5': [
+    "11111111",
+    "11111111",
+    "11000000",
+    "11000000",
+    "11111110",
+    "11111111",
+    "00000011",
+    "00000011",
+    "00000011",
+    "11000011",
+    "11111111",
+    "01111110"
+  ],
+  '6': [
+    "01111110",
+    "11111111",
+    "11000000",
+    "11000000",
+    "11111110",
+    "11111111",
+    "11000011",
+    "11000011",
+    "11000011",
+    "11000011",
+    "11111111",
+    "01111110"
+  ],
+  '7': [
+    "11111111",
+    "11111111",
+    "00000011",
+    "00000110",
+    "00001100",
+    "00011000",
+    "00011000",
+    "00110000",
+    "00110000",
+    "01100000",
+    "01100000",
+    "01100000"
+  ],
+  '8': [
+    "01111110",
+    "11111111",
+    "11000011",
+    "11000011",
+    "01111110",
+    "11111111",
+    "11000011",
+    "11000011",
+    "11000011",
+    "11000011",
+    "11111111",
+    "01111110"
+  ],
+  '9': [
+    "01111110",
+    "11111111",
+    "11000011",
+    "11000011",
+    "11000011",
+    "11111111",
+    "01111111",
+    "00000011",
+    "00000011",
+    "00000011",
+    "11111111",
+    "01111110"
+  ]
+};
+
+const TEMPLATE_VECTORS = {};
+for (const d in DIGIT_TEMPLATES) {
+  const vec = [];
+  for (const row of DIGIT_TEMPLATES[d]) {
+    for (let i = 0; i < 8; i++) {
+      vec.push(row[i] === '1' ? 1.0 : 0.0);
+    }
+  }
+  TEMPLATE_VECTORS[d] = vec;
+}
+
+function extract8x12Vector(isFgFn, minX, maxX, minY, maxY) {
+  const w = maxX - minX + 1;
+  const h = maxY - minY + 1;
+  const vec = [];
+  const GW = 8;
+  const GH = 12;
+
+  for (let gy = 0; gy < GH; gy++) {
+    const y0 = minY + Math.floor((gy * h) / GH);
+    const y1 = minY + Math.floor(((gy + 1) * h) / GH);
+    const yEnd = Math.max(y0 + 1, y1);
+
+    for (let gx = 0; gx < GW; gx++) {
+      const x0 = minX + Math.floor((gx * w) / GW);
+      const x1 = minX + Math.floor(((gx + 1) * w) / GW);
+      const xEnd = Math.max(x0 + 1, x1);
+
+      let total = 0;
+      let fgCount = 0;
+      for (let y = y0; y < yEnd; y++) {
+        for (let x = x0; x < xEnd; x++) {
+          total++;
+          if (isFgFn(x, y)) fgCount++;
+        }
+      }
+      vec.push(total > 0 ? fgCount / total : 0);
+    }
+  }
+  return vec;
+}
+
+function cosineSimilarity(v1, v2) {
+  let dot = 0, n1 = 0, n2 = 0;
+  for (let i = 0; i < v1.length; i++) {
+    dot += v1[i] * v2[i];
+    n1 += v1[i] * v1[i];
+    n2 += v2[i] * v2[i];
+  }
+  if (n1 === 0 || n2 === 0) return 0;
+  return dot / (Math.sqrt(n1) * Math.sqrt(n2));
+}
+
+function isSingleStroke(isFgFn, minX, maxX, minY, maxY) {
+  const h = maxY - minY + 1;
+  const w = maxX - minX + 1;
+  if (h < 5) return false;
+
+  let singleCrossingRows = 0;
+  let maxRowWidth = 0;
+  let totalStrokeWidth = 0;
+  let strokeCount = 0;
+
+  for (let y = minY; y <= maxY; y++) {
+    let crossings = 0;
+    let inFg = false;
+    let run = 0;
+    let maxRunInRow = 0;
+
+    for (let x = minX; x <= maxX; x++) {
+      const fg = isFgFn(x, y);
+      if (fg) {
+        run++;
+        if (run > maxRunInRow) maxRunInRow = run;
+        if (!inFg) { crossings++; inFg = true; }
+      } else {
+        run = 0;
+        inFg = false;
+      }
+    }
+
+    if (crossings === 1) {
+      singleCrossingRows++;
+      totalStrokeWidth += maxRunInRow;
+      strokeCount++;
+    }
+    if (maxRunInRow > maxRowWidth) maxRowWidth = maxRunInRow;
+  }
+
+  const avgStrokeWidth = strokeCount > 0 ? totalStrokeWidth / strokeCount : w;
+  return (singleCrossingRows >= h * 0.82 && maxRowWidth <= avgStrokeWidth * 1.6 && w <= h * 0.65);
+}
+
+function classifyDigit(isFgFn, minX, maxX, minY, maxY) {
+  const w = maxX - minX + 1;
+  const h = maxY - minY + 1;
+  const ratio = w / h;
+
+  // Single stroke (vertical or slanted bar with no branches or loops) is '1'
+  if (ratio < 0.35 || isSingleStroke(isFgFn, minX, maxX, minY, maxY)) {
+    return '1';
+  }
+
+  const vec = extract8x12Vector(isFgFn, minX, maxX, minY, maxY);
+  const scores = {};
+  for (const d in TEMPLATE_VECTORS) {
+    scores[d] = cosineSimilarity(vec, TEMPLATE_VECTORS[d]);
+  }
+
+  let totalFg = 0, topFg = 0, bottomFg = 0, leftFg = 0, rightFg = 0;
+  const midY = minY + h / 2;
+  const midX = minX + w / 2;
+
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      if (isFgFn(x, y)) {
+        totalFg++;
+        if (y < midY) topFg++; else bottomFg++;
+        if (x < midX) leftFg++; else rightFg++;
+      }
+    }
+  }
+
+  function getCrossingsAt(yRatio) {
+    const y = Math.floor(minY + h * yRatio);
+    let crossings = 0;
+    let inFg = false;
+    for (let x = minX; x <= maxX; x++) {
+      const fg = isFgFn(x, y);
+      if (fg && !inFg) { crossings++; inFg = true; }
+      else if (!fg && inFg) { inFg = false; }
+    }
+    return crossings;
+  }
+
+  const c25 = getCrossingsAt(0.25);
+  const c50 = getCrossingsAt(0.50);
+  const c75 = getCrossingsAt(0.75);
+
+  if (ratio < 0.40 && c25 <= 1 && c50 <= 1 && c75 <= 1) {
+    scores['1'] = (scores['1'] || 0) + 0.35;
+  }
+  if (c25 >= 2 && c50 >= 2 && c75 >= 2) {
+    scores['0'] = (scores['0'] || 0) + 0.15;
+    scores['8'] = (scores['8'] || 0) + 0.20;
+  }
+  if (c25 <= 1 && c75 >= 2 && bottomFg > topFg) {
+    scores['6'] = (scores['6'] || 0) + 0.25;
+  }
+  if (c25 >= 2 && c75 <= 1 && topFg > bottomFg) {
+    scores['9'] = (scores['9'] || 0) + 0.25;
+  }
+  if (topFg > bottomFg * 1.5 && c25 <= 1) {
+    scores['7'] = (scores['7'] || 0) + 0.20;
+  }
+  if (c50 >= 2 && rightFg > leftFg && c75 <= 1) {
+    scores['4'] = (scores['4'] || 0) + 0.15;
+  }
+
+  let bestDigit = '0';
+  let bestScore = -1;
+  for (const d in scores) {
+    if (scores[d] > bestScore) {
+      bestScore = scores[d];
+      bestDigit = d;
+    }
+  }
+  return bestDigit;
+}
+
 function recognizeDigits(cols, rows, buf, bg, minX, maxX, minY, maxY) {
   try {
+    const isFg = (x, y) => {
+      if (x < 0 || x >= cols || y < 0 || y >= rows) return false;
+      return buf[y * cols + x] !== bg;
+    };
+
+    // 1. Detect vertical core band (removing top/bottom banners or arcs)
+    const rowStats = [];
+    const totalW = maxX - minX + 1;
+    for (let y = minY; y <= maxY; y++) {
+      let cnt = 0;
+      let maxRun = 0;
+      let curRun = 0;
+      for (let x = minX; x <= maxX; x++) {
+        if (isFg(x, y)) {
+          cnt++;
+          curRun++;
+          if (curRun > maxRun) maxRun = curRun;
+        } else {
+          curRun = 0;
+        }
+      }
+      rowStats.push({ y, cnt, maxRun });
+    }
+
+    let bandMinY = minY;
+    let bandMaxY = maxY;
+    for (const r of rowStats) {
+      if (r.maxRun > totalW * 0.70 && r.y < minY + (maxY - minY) * 0.35) {
+        bandMinY = r.y + 1;
+      }
+    }
+    for (let i = rowStats.length - 1; i >= 0; i--) {
+      const r = rowStats[i];
+      if (r.maxRun > totalW * 0.70 && r.y > maxY - (maxY - minY) * 0.35) {
+        bandMaxY = r.y - 1;
+      }
+    }
+    if (bandMaxY <= bandMinY) {
+      bandMinY = minY;
+      bandMaxY = maxY;
+    }
+
+    // 2. Column histogram in bandMinY..bandMaxY
     const colCounts = [];
+    let maxColCount = 0;
     for (let x = minX; x <= maxX; x++) {
-      let count = 0;
-      for (let y = minY; y <= maxY; y++) {
-        if (buf[y * cols + x] !== bg) count++;
+      let cnt = 0;
+      for (let y = bandMinY; y <= bandMaxY; y++) {
+        if (isFg(x, y)) cnt++;
       }
-      colCounts.push({ x, count });
+      colCounts.push({ x, cnt });
+      if (cnt > maxColCount) maxColCount = cnt;
     }
 
-    const segments = [];
-    let cur = null;
-    for (const c of colCounts) {
-      if (c.count > 0) {
-        if (!cur) cur = { startX: c.x, endX: c.x };
-        else cur.endX = c.x;
-      } else {
-        if (cur) {
-          if (cur.endX - cur.startX >= 1) segments.push(cur);
-          cur = null;
+    if (maxColCount === 0) return null;
+
+    // 3. Peak and Valley Segmentation on Column Histogram
+    const smoothed = [];
+    for (let i = 0; i < colCounts.length; i++) {
+      const p = colCounts[i - 1] ? colCounts[i - 1].cnt : colCounts[i].cnt;
+      const c = colCounts[i].cnt;
+      const n = colCounts[i + 1] ? colCounts[i + 1].cnt : colCounts[i].cnt;
+      smoothed.push({ x: colCounts[i].x, val: 0.25 * p + 0.5 * c + 0.25 * n });
+    }
+
+    const splitPoints = [minX];
+    for (let i = 2; i < smoothed.length - 2; i++) {
+      const cur = smoothed[i].val;
+      const prev = smoothed[i - 1].val;
+      const next = smoothed[i + 1].val;
+
+      if (cur <= prev && cur <= next) {
+        const lastSplit = splitPoints[splitPoints.length - 1];
+        const dist = smoothed[i].x - lastSplit;
+        const distToEnd = maxX - smoothed[i].x;
+
+        if (dist >= 6 && distToEnd >= 6) {
+          const leftPeak = Math.max(...smoothed.slice(Math.max(0, i - 12), i).map(s => s.val));
+          const rightPeak = Math.max(...smoothed.slice(i + 1, Math.min(smoothed.length, i + 13)).map(s => s.val));
+          if (cur < leftPeak * 0.85 && cur < rightPeak * 0.85) {
+            splitPoints.push(smoothed[i].x);
+          }
         }
       }
     }
-    if (cur && cur.endX - cur.startX >= 1) segments.push(cur);
+    splitPoints.push(maxX + 1);
 
-    sendIPC('info', `[MAP_DIGITS] Found ${segments.length} digit segment(s): ${JSON.stringify(segments)}`);
-    if (segments.length === 0) return null;
+    const splitSegments = [];
+    for (let i = 0; i < splitPoints.length - 1; i++) {
+      splitSegments.push({ startX: splitPoints[i], endX: splitPoints[i + 1] - 1 });
+    }
 
+    sendIPC('info', `[MAP_DIGITS] Found ${splitSegments.length} digit segment(s): ${JSON.stringify(splitSegments)}`);
+    if (splitSegments.length === 0) return null;
+
+    // 4. For each segment, calculate local bounding box and recognize
     let result = '';
-    for (const seg of segments) {
-      const sw = seg.endX - seg.startX + 1;
-      const sh = maxY - minY + 1;
-      const ratio = sw / sh;
+    for (const seg of splitSegments) {
+      let dMinY = bandMaxY, dMaxY = bandMinY;
+      let dMinX = seg.endX, dMaxX = seg.startX;
+      let fgCount = 0;
 
-      let fgPixels = 0;
-      let topHalfFg = 0;
-      let bottomHalfFg = 0;
-      let leftHalfFg = 0;
-      let rightHalfFg = 0;
-      const midY = Math.floor((minY + maxY) / 2);
-      const midX = Math.floor((seg.startX + seg.endX) / 2);
-
-      for (let y = minY; y <= maxY; y++) {
+      for (let y = bandMinY; y <= bandMaxY; y++) {
         for (let x = seg.startX; x <= seg.endX; x++) {
-          if (buf[y * cols + x] !== bg) {
-            fgPixels++;
-            if (y < midY) topHalfFg++;
-            else bottomHalfFg++;
-            if (x < midX) leftHalfFg++;
-            else rightHalfFg++;
+          if (isFg(x, y)) {
+            fgCount++;
+            if (y < dMinY) dMinY = y;
+            if (y > dMaxY) dMaxY = y;
+            if (x < dMinX) dMinX = x;
+            if (x > dMaxX) dMaxX = x;
           }
         }
       }
 
-      function getCrossingsAt(yRatio) {
-        const y = Math.floor(minY + sh * yRatio);
-        let crossings = 0;
-        let inFg = false;
-        for (let x = seg.startX; x <= seg.endX; x++) {
-          const isFg = buf[y * cols + x] !== bg;
-          if (isFg && !inFg) {
-            crossings++;
-            inFg = true;
-          } else if (!isFg && inFg) {
-            inFg = false;
-          }
-        }
-        return crossings;
+      if (fgCount < 10 || dMaxY - dMinY < 5 || dMaxX < dMinX) {
+        continue;
       }
 
-      const c25 = getCrossingsAt(0.25);
-      const c50 = getCrossingsAt(0.50);
-      const c75 = getCrossingsAt(0.75);
-
-      let digit = '?';
-      if (ratio < 0.38) {
-        digit = '1';
-      } else if (c50 === 1 && c25 === 2 && c75 === 2) {
-        digit = '0';
-      } else if (c50 === 3 || c50 === 2) {
-        if (c25 === 1 && c75 === 2) digit = '6';
-        else if (c25 === 2 && c75 === 1) digit = '9';
-        else if (c25 === 2 && c75 === 2 && c50 === 2) digit = '8';
-        else if (topHalfFg < bottomHalfFg * 0.7) digit = '2';
-        else if (rightHalfFg > leftHalfFg * 1.3) digit = '3';
-        else digit = '5';
-      } else if (c50 === 1) {
-        if (c25 === 1 && topHalfFg > bottomHalfFg * 1.5) digit = '7';
-        else if (c75 === 1 && leftHalfFg < rightHalfFg) digit = '4';
-        else digit = '1';
-      } else {
-        digit = '0';
-      }
-
+      const digit = classifyDigit(isFg, dMinX, dMaxX, dMinY, dMaxY);
       result += digit;
     }
 
-    return result;
+    return result || null;
   } catch (e) {
     return null;
   }
@@ -315,6 +653,16 @@ function handleMapCaptcha(data) {
     const len = buf ? buf.length : 0;
     sendIPC('info', `[MAP PACKET] itemDamage=${data.itemDamage}, cols=${cols}, rows=${rows}, len=${len}`);
     if (!buf || len === 0 || cols === 0 || rows === 0) return;
+
+    // Fast MD5 hash of map pixel buffer to debounce duplicate packets & burst protection
+    const mapHash = crypto.createHash('md5').update(buf).digest('hex');
+    const now = Date.now();
+    if ((lastSolvedMapHash === mapHash && (now - lastSolvedMapTime < 60000)) || (now - lastMapProcessTime < 3000)) {
+      sendIPC('info', `[MAP_SOLVER] Map ${mapHash.slice(0, 8)} debounced (processed recently).`);
+      return;
+    }
+    lastMapProcessTime = now;
+    isCaptchaPending = true;
 
     const freq = {};
     for (let i = 0; i < len; i++) {
@@ -361,19 +709,12 @@ function handleMapCaptcha(data) {
 
       const code = recognizeDigits(cols, rows, buf, bg, minX, maxX, minY, maxY);
       if (code) {
+        lastSolvedMapHash = mapHash;
+        lastSolvedMapTime = Date.now();
         sendIPC('info', `[MAP_SOLVER] Successfully recognized captcha code: "${code}"`);
-        setTimeout(() => {
+        safeTimeout(() => {
           sendIPC('info', `Submitting captcha code: "${code}"`);
           safeChat(code);
-          safeChat(`/captcha ${code}`);
-          safeChat(`/code ${code}`);
-
-          setTimeout(() => {
-            if (!hasLoggedIn && config.password) {
-              sendIPC('info', 'Sending login credentials after captcha solve...');
-              safeChat(`/login ${config.password}`);
-            }
-          }, 1500);
         }, 800);
       }
     }
@@ -412,29 +753,14 @@ function createBot() {
       reconnectAttempts = 0;
       sendIPC('status', 'logged_in', { username: bot.username });
 
-      // Immediate authentication on protocol login to prevent 20s captcha/auth timeout kick
-      if (config.password && !hasLoggedIn) {
-        let authAttempt = 0;
-        const authInterval = setInterval(() => {
-          if (hasLoggedIn || isStopping || !bot || authAttempt >= 5) {
-            clearInterval(authInterval);
-            return;
-          }
-          authAttempt++;
-          sendIPC('info', `Sending login credentials (attempt ${authAttempt})...`);
+      // Reactive authentication: responds to server chat prompt (/login or /register).
+      // Delayed peaceful fallback (6s) only if no prompt and no captcha was seen.
+      safeTimeout(() => {
+        if (!hasLoggedIn && !isCaptchaPending && config.password && bot && !isStopping) {
+          sendIPC('info', 'Sending login credentials (peaceful fallback)...');
           safeChat(`/login ${config.password}`);
-          safeChat(`/register ${config.password} ${config.password}`);
-
-          // Anti-bot human-like micro action
-          try {
-            if (typeof bot.swingArm === 'function') bot.swingArm('right');
-            if (bot.entity) {
-              const delta = (Math.random() - 0.5) * 0.1;
-              bot.look(bot.entity.yaw + delta, bot.entity.pitch, true);
-            }
-          } catch (_) {}
-        }, 1500);
-      }
+        }
+      }, 6000);
     });
 
     // Velocity 1.7.2 configuration transition & packet inspection handling
@@ -477,17 +803,38 @@ function createBot() {
           sendIPC('info', `[PACKET:${name}] text="${cleanText}" raw=${rawJson}`);
 
           // Check if packet text contains captcha instruction or code
-          if (cleanText) {
+          // Explicitly ignore kick_disconnect, disconnect, and system kicks so their text
+          // ("You have entered the incorrect captcha code...") NEVER triggers the captcha regex!
+          const isKickPacket = ['kick_disconnect', 'disconnect'].includes(name) ||
+                               name.toLowerCase().includes('kick') ||
+                               name.toLowerCase().includes('disconnect');
+
+          const isKickOrErrorText = /(?:incorrect|wrong|invalid|failed|error|noto'?g'?ri|xato)\s+(?:captcha|code|kod)/i.test(cleanText) ||
+                                    /kicked|disconnect|banned|reconnect|too long|timed out|attempts remaining/i.test(cleanText) ||
+                                    /you have entered (?:the )?incorrect/i.test(cleanText) ||
+                                    /entered\s+the\s+incorrect/i.test(cleanText) ||
+                                    /please reconnect/i.test(cleanText);
+
+          if (!hasLoggedIn && !isKickPacket && !isKickOrErrorText && cleanText) {
             const codeMatch = cleanText.match(/(?:\/captcha|\/code)\s+([0-9a-zA-Z]+)/i) ||
-                              cleanText.match(/(?:kod|code|captcha)[:\s]+([0-9a-zA-Z]{3,8})/i) ||
-                              cleanText.match(/^([0-9a-zA-Z]{4,8})$/);
+                              cleanText.match(/(?:captcha\s+code|kod(?:ni)?(?:\s+kiriting)?|code|kod|captcha)\s*[:=]\s*([0-9a-zA-Z]{3,8})/i) ||
+                              cleanText.match(/(?:captcha\s+code|kod(?:ni)?(?:\s+kiriting)?|code|kod|captcha)\s+([0-9]{3,8})\b/i) ||
+                              cleanText.match(/^\s*([0-9a-zA-Z]{4,8})\s*$/);
             if (codeMatch && codeMatch[1]) {
-              const captchaCode = codeMatch[1];
-              sendIPC('info', `Auto-Captcha: Extracted code "${captchaCode}" from packet ${name}`);
-              setTimeout(() => {
-                safeChat(captchaCode);
-                safeChat(`/captcha ${captchaCode}`);
-              }, 500);
+              const captchaCode = codeMatch[1].trim();
+              const invalidWords = ['incorrect', 'captcha', 'please', 'reconnect', 'failed', 'kicked', 'server', 'player', 'session', 'code', 'kod', 'enter', 'kiriting', 'allaysmp', 'website', 'store', 'discord', 'welcome'];
+              const now = Date.now();
+              if (!invalidWords.includes(captchaCode.toLowerCase())) {
+                if (captchaCode !== lastSubmittedChatCaptcha || (now - lastSubmittedChatCaptchaTime > 5000)) {
+                  lastSubmittedChatCaptcha = captchaCode;
+                  lastSubmittedChatCaptchaTime = now;
+                  sendIPC('info', `Auto-Captcha: Extracted code "${captchaCode}" from packet ${name}`);
+                  safeTimeout(() => {
+                    sendIPC('info', `Submitting captcha code: "${captchaCode}"`);
+                    safeChat(captchaCode);
+                  }, 500);
+                }
+              }
             }
           }
 
@@ -533,33 +880,28 @@ function createBot() {
 
     bot.on('spawn', () => {
       spawnCount++;
+      isWorldTransferring = false;
       sendIPC('info', `Bot spawned (spawn count: ${spawnCount})`);
 
-      // Smart Auth fallback: send /login after delay if prompt not caught
-      if (!hasLoggedIn && config.password) {
-        setTimeout(() => {
-          if (!hasLoggedIn && bot && !isStopping && !isWorldTransferring) {
-            sendIPC('info', 'Sending login credentials (spawn fallback)...');
-            safeChat(`/login ${config.password}`);
-            hasLoggedIn = true;
-          }
-        }, 1500);
+      // Wait for login before switching subserver
+      if (hasLoggedIn) {
+        isCaptchaPending = false;
       }
 
       // Subserver handling
       const targetSub = config.subserver ? config.subserver.toLowerCase() : '';
       if (targetSub === 'lobby' || targetSub === 'hub') {
         // Already on lobby/hub by default
-        setTimeout(() => {
+        safeTimeout(() => {
           if (currentServer !== config.subserver) {
             currentServer = config.subserver;
             sendIPC('status', 'in_economy', { server: config.subserver });
           }
           triggerAfk();
         }, 2500);
-      } else if (hasLoggedIn && config.subserver && currentServer !== config.subserver && !isWorldTransferring) {
-        setTimeout(() => {
-          if (currentServer !== config.subserver && !isStopping && !isWorldTransferring) {
+      } else if (hasLoggedIn && config.subserver && currentServer !== config.subserver) {
+        safeTimeout(() => {
+          if (currentServer !== config.subserver && !isStopping) {
             sendIPC('info', `Requesting server switch: /server ${config.subserver}`);
             safeChat(`/server ${config.subserver}`);
           }
@@ -570,9 +912,10 @@ function createBot() {
     });
 
     bot.on('respawn', () => {
+      isWorldTransferring = false;
       sendIPC('server_change', 'Respawn event detected (switching world/server)');
       if (hasLoggedIn) {
-        setTimeout(() => {
+        safeTimeout(() => {
           checkAndApplyAfk();
         }, 3000);
       }
@@ -762,9 +1105,12 @@ function createBot() {
           reasonText = typeof parsed.text === 'string' ? parsed.text : JSON.stringify(parsed.text);
         }
       } catch (_) {}
-      sendIPC('kicked', `Kicked from server: ${reasonText}`);
+      sendIPC('kicked', `Kicked from server: ${reasonText}`, { reason: reasonText });
       cleanupBot();
-      scheduleReconnect();
+      // On kick, do NOT attempt a 2nd reconnect automatically! Halt immediately for inspection.
+      isStopping = true;
+      sendIPC('status', 'kicked', { reason: reasonText });
+      process.exit(1);
     });
 
     bot.on('end', (reason) => {
@@ -782,12 +1128,14 @@ function createBot() {
 }
 
 function cleanupBot() {
+  clearAllPendingTimers();
   if (antiKickInterval) {
     clearInterval(antiKickInterval);
     antiKickInterval = null;
   }
   isAfkActive = false;
   hasLoggedIn = false;
+  isCaptchaPending = false;
   isWorldTransferring = false;
   if (bot) {
     try {
@@ -837,16 +1185,27 @@ function stopBot() {
 process.on('SIGINT', stopBot);
 process.on('SIGTERM', stopBot);
 
-process.stdin.on('data', (data) => {
-  try {
-    const input = JSON.parse(data.toString().trim());
-    if (input.command === 'stop') {
-      stopBot();
-    } else if (input.command === 'chat' && input.text) {
-      safeChat(input.text);
-    }
-  } catch (_) {}
-});
+// Start the bot and stdin listener when run directly as script
+if (require.main === module) {
+  process.stdin.on('data', (data) => {
+    try {
+      const input = JSON.parse(data.toString().trim());
+      if (input.command === 'stop') {
+        stopBot();
+      } else if (input.command === 'chat' && input.text) {
+        safeChat(input.text);
+      }
+    } catch (_) {}
+  });
 
-// Start the bot
-createBot();
+  createBot();
+}
+
+module.exports = {
+  createBot,
+  safeChat,
+  recognizeDigits,
+  handleMapCaptcha,
+  classifyDigit,
+  parseArgs
+};
