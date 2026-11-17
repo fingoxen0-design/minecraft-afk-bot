@@ -206,6 +206,33 @@ class Minecraft247Bot {
         freq[c] = (freq[c] || 0) + 1;
       }
       console.log(`[Mineflayer] [MAP_COLORS] ${JSON.stringify(freq)}`);
+
+      // Multi-color ASCII visualization
+      const sortedColors = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+      const colorChar = {};
+      colorChar[sortedColors[0][0]] = ' '; // Asosiy fon bo'sh joy
+      if (sortedColors[1] && sortedColors[1][1] > 1200) {
+        colorChar[sortedColors[1][0]] = '.'; // Qalqon / ramka foni
+      }
+      const palette = ['#', '@', '%', '*', '+', '=', 'O', 'X', 'M', 'W', 'Z'];
+      let palIdx = 0;
+      for (const [col] of sortedColors) {
+        if (!colorChar[col]) {
+          colorChar[col] = palette[palIdx++ % palette.length];
+        }
+      }
+
+      const mapLines = [];
+      for (let y = 0; y < rows; y += 2) {
+        let line = '';
+        for (let x = 0; x < cols; x += 2) {
+          const c = buf[y * cols + x];
+          line += colorChar[c] || '?';
+        }
+        mapLines.push(line);
+      }
+      console.log(`[Mineflayer] [COLOR_ASCII]\n${mapLines.join('\n')}`);
+
       let bg = null;
       let maxCount = 0;
       for (const c in freq) {
