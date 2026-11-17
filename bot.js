@@ -205,6 +205,7 @@ class Minecraft247Bot {
         const c = buf[i];
         freq[c] = (freq[c] || 0) + 1;
       }
+      console.log(`[Mineflayer] [MAP_COLORS] ${JSON.stringify(freq)}`);
       let bg = null;
       let maxCount = 0;
       for (const c in freq) {
@@ -386,6 +387,10 @@ class Minecraft247Bot {
     // Xom paketlarni (Map Captcha & Kick) kuzatish
     bot._client.on('packet', (data, meta) => {
       const name = meta ? meta.name : '';
+
+      if (['title', 'set_title_text', 'set_title_subtitle', 'set_action_bar_text', 'boss_bar'].includes(name)) {
+        console.log(`[Mineflayer] [PACKET:${name}] ${JSON.stringify(data)}`);
+      }
 
       // Map Captcha
       if (name === 'map' && data) {
