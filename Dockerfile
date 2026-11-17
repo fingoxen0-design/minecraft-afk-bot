@@ -1,26 +1,16 @@
-FROM python:3.12-slim
-
-# Node.js va npm o'rnatish (Mineflayer uchun)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/*
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Python va Node.js bog'liqliklarini keshdan o'rnatish
-COPY requirements.txt package*.json ./
-RUN pip install --no-cache-dir -r requirements.txt \
-    && npm install --omit=dev
+# Paket bog'liqliklarini o'rnatish
+COPY package*.json ./
+RUN npm install --omit=dev
 
-# Loyiha fayllarini ko'chirish
+# Loyiha fayllarini nusxalash
 COPY . .
 
-# Healthcheck porti
+# Render Veb Porti
 EXPOSE 8080
 
-# Standart ishga tushirish buyrug'i
-CMD ["python", "bot.py"]
+# 24/7 Node.js Bot va Veb Serverni ishga tushirish
+CMD ["node", "bot.js"]

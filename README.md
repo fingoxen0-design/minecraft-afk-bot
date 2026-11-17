@@ -1,170 +1,66 @@
-# 🚀 Minecraft Server Vote Reminder & 24/7 AFK Bot
+# 🚀 Minecraft 24/7 Headless AFK Bot (Pure Node.js)
 
-Ushbu loyiha shaxsiy kompyuterni doimiy yoqib qo'ymasdan:
-1. **Minecraft serveringiz uchun har 15 soatda ovoz berish vaqtini o'tkazib yubormaslik**;
-2. **Minecraft serverga avtomatik kirib, `/server economy` ga o'tuvchi va `/afk` holatida 24/7 turuvchi AFK Bot**;
-3. **Admin va pulli foydalanuvchilar obuna tizimi (1 kunlik sinov muddati va cheklangan faol slotlar)**;
-4. **Ikki tomonlama server monitoringi (Watchdog)** bilan uzluksiz 24/7 ishlashini ta'minlash uchun ishlab chiqilgan.
+Ushbu loyiha shaxsiy kompyuterni yoqib qo'ymasdan:
+1. **Minecraft serverda hisobingizni 24/7 onlayn ushlab turish** (Render bulutida avtomatik ishga tushadi);
+2. **Serverga avtomatik kirish, `/login`, `/server economy` ga o'tish va `/afk` rejimida turish**;
+3. **Map Captcha OCR va Anti-Kick** (xarita orqali beriladigan captcha kodlarini avtomatik yechish va kickinga tushmaslik);
+4. **4 ta alohida Ovoz Berish (Vote) taymerlari va monitoringi**;
+5. **Render Anti-Sleep (KeepAlive)** orqali bepul serverni 24/7 uyg'oq saqlash;
+6. **Veb Dashboard va Jonli Terminal** (`/` yoki `/logs`) orqali real-vaqtda loglarni kuzatish va botni boshqarish uchun ishlab chiqilgan.
 
----
-
-## 📌 Asosiy Imkoniyatlar
-
-### 1. 🎮 Minecraft 24/7 AFK Bot (Mineflayer Dvigateli)
-- Har bir foydalanuvchi o'z o'yin niki va parolini kiritib, o'zining shaxsiy AFK botini ishga tushiradi.
-- Serverga ulanadi va kerak bo'lsa `/login <parol>` yoki `/register` orqali tizimga kiradi.
-- BungeeCord / Velocity orqali `/server economy` buyrug'ini yozadi va server almashganini tekshiradi.
-- Economy serverga tushgach avtomatik `/afk` yozadi.
-- **Anti-Kick**: Serverdan chiqarib yuborilmaslik uchun davriy ravishda yengil harakat qiladi (boshni burish, sakrash).
-- **Auto-Reconnect**: Server o'chib-yonsa yoki uzilish bo'lsa, 10 soniyada qayta ulanadi.
-
-### 2. 👑 Admin va Obuna Tizimi (Trial & Premium)
-- **Super Admin**: Bot egasi (Admin ID) to'liq, bepul va cheksiz huquqqa ega.
-- **Yangi foydalanuvchilar**: 1 kunlik (24 soat) bepul sinov (Trial) muddati beriladi.
-- **Sinov muddati tugaganda**: Bot avtomatik to'xtaydi va Premium obuna talab qiladi.
-- **Admin paneli**: `/grant <chat_id> <kunlar>` orqali foydalanuvchilarga obuna muddatini uzaytirish, `/users` orqali ro'yxatni ko'rish.
-- **Slot cheklovi**: Server resurslarini tejash uchun bir vaqtning o'zida maksimal 1-2 ta faol bot ishlashi cheklangan.
-
-### 3. 🗳 Ovoz Berish Eslatmasi (Vote Reminder)
-- Har 15 soatda ovoz berish havolasi va tugmalar bilan eslatma yuboriladi.
-- Saytdan olingan havoladagi vaqtni (`?error=2&time=...`) avtomatik tahlil qiladi.
+> **100% Sof JavaScript (Node.js)**: Python yoki Telegram talab etilmaydi. Yengil `node:20-alpine` konteynerida tezkor ishlaydi.
 
 ---
 
-## 🏗 Arxitektura
+## ⚙️ Sozlamalar (`.env`)
 
-```mermaid
-flowchart TD
-    User["📱 Foydalanuvchi / Admin (Telegram)"] <--> BotPy["bot.py (Telegram Polling + Menu)"]
-    
-    subgraph Core ["Boshqaruv Tizimi"]
-        UserManager["user_manager.py\n(Admin / 24h Trial / Premium)"]
-        AFKManager["afk_manager.py\n(Subprocess Manager)"]
-        VoteTracker["vote_tracker.py\n(Ovoz Taymeri)"]
-        HealthServer["health_server.py\n(:8080 Monitoring)"]
-    end
-    
-    BotPy <--> UserManager
-    BotPy <--> AFKManager
-    BotPy <--> VoteTracker
-    BotPy --- HealthServer
-    
-    subgraph Engine ["Minecraft Dvigateli"]
-        Mineflayer["minecraft_bot.js (Node.js)\n/login -> /server economy -> /afk"]
-    end
-    
-    AFKManager -->|IPC Subprocess| Mineflayer
-    
-    subgraph Watchdog_Server ["Server B (Nazoratchi)"]
-        Watchdog["watchdog.py (Har 60 soniyada ping)"]
-    end
-    
-    HealthServer -->|HTTP GET /health| Watchdog
+```ini
+# Minecraft Server & Hisob Sozlamalari
+MC_HOST=allaysmp.pro
+MC_PORT=25565
+MC_VERSION=1.21.1
+MC_SUBSERVER=economy
+MC_USERNAME=Gotto
+MC_PASSWORD=bunyod
+AUTO_AFK_ON_BOOT=true
+
+# 4 ta Ovoz Berish (Vote) Saytlari
+VOTE_1_URL=https://minecraft-mp.com/server/350645/vote/
+VOTE_2_URL=
+VOTE_3_URL=
+VOTE_4_URL=
+COOLDOWN_HOURS=15.0
+
+# Render Veb & Anti-Sleep
+PORT=8080
+RENDER_EXTERNAL_URL=https://minecraft-afk-bot-y7ak.onrender.com
+ENABLE_KEEP_ALIVE=true
+KEEP_ALIVE_INTERVAL=600
 ```
 
 ---
 
-## ⚙️ Sozlash (Configuration)
+## 🚀 Render.com da Ishga Tushirish
 
-1. Bog'liqliklarni o'rnating:
+1. Repozitoriyani [Render.com](https://render.com) ga **Web Service** sifatida ulang.
+2. Sozlamalar:
+   - **Environment**: `Docker` (yoki `Node`)
+   - **Build Command**: `npm install --omit=dev`
+   - **Start Command**: `node bot.js`
+3. Environment Variables (Muhit o'zgaruvchilari):
+   - `.env.example` dagi o'zgaruvchilarni kiriting.
+4. Veb Dashboard manzili: `https://<your-service>.onrender.com/logs`
+
+---
+
+## 💻 Mahalliy (Local) Ishga Tushirish
+
 ```bash
 npm install
-pip install -r requirements.txt
+npm start
 ```
 
-2. `.env` faylini sozlang:
-```ini
-TELEGRAM_BOT_TOKEN=your_bot_token_here
-TELEGRAM_CHAT_ID=your_telegram_id_here
-ADMIN_USER_IDS=your_telegram_id_here
-MAX_ACTIVE_BOTS=2
-DEFAULT_MC_HOST=mc.example.com
-DEFAULT_MC_PORT=25565
-DEFAULT_MC_SUBSERVER=economy
-```
-
----
-
-## 🚀 24/7 Ishga Tushirish
-
-### 1-variant: Windows Kompyuterda (Fonda 24/7)
-Oddiygina `run_24_7.bat` faylini ikki marta bosing. Agar bot qandaydir sabab bilan to'xtasa, skript uni 5 soniyada avtomatik qayta ishga tushiradi:
-```cmd
-run_24_7.bat
-```
-Yoki PM2 orqali:
+Testlarni yurgizish:
 ```bash
-pm2 start ecosystem.config.js
-pm2 save
-```
-
-### 2-variant: Linux VPS / Serverga 1-klikda joylashtirish (Tavsiya etiladi)
-
-Serveringiz (Ubuntu/Debian) terminaliga kiring va loyiha papkasida quyidagilarni bajaring:
-```bash
-git clone <REPOSITORIY_LINKI>
-cd bot
-sudo bash deploy.sh
-```
-Ushbu skript avtomatik tarzda:
-- Dockerni tekshiradi va o'rnatadi;
-- `.env` sozlamalarini yaratadi;
-- Botni fonga (background) olib, 24/7 rejimida uzluksiz ishga tushiradi!
-
-Konteyner holati va loglarni boshqarish:
-```bash
-docker compose ps               # Holatni tekshirish
-docker compose logs -f vote-bot # Jonli loglarni ko'rish
-docker compose restart          # Qayta ishga tushirish
-docker compose down             # To'xtatish
-```
-
-### 3-variant: Linux Systemd Xizmati orqali
-```bash
-sudo cp deploy/mc-vote-bot.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable mc-vote-bot
-sudo systemctl start mc-vote-bot
-```
-
----
-
-## 🤖 Telegram Bot Buyruqlari
-
-### Umumiy & AFK Bot:
-* `/start` — Asosiy menyu va hisob holati
-* `/afk_start` — Minecraft AFK botni ishga tushirish
-* `/afk_stop` — AFK botni to'xtatish
-* `/afk_status` — Hozirgi holat, jon (HP), to'qlik va jonli loglar
-* `/say [matn]` — Minecraft server chatiga Telegramdan xabar yozish
-* `/cmd [buyruq]` — Minecraft serveriga buyruq yuborish (masalan: `/cmd /spawn`)
-* `/ping` — Bot va server javob tezligini tekshirish
-* `/logs` — Jonli Veb-Terminal va 2 soatlik Qora quti havolasi
-* `/settings` — Barcha bot sozlamalarini ko'rish
-* `/seturl [havola]` — Ovoz berish sayti havolasini o'zgartirish
-* `/setcooldown [soat]` — Taymer oraliq vaqtini o'zgartirish (masalan: 15)
-* `/setnick [nik]` — O'yinchi niki
-* `/setpass [parol]` — Server paroli (/login)
-* `/setserver [ip] [port] [subserver]` — Minecraft server manzili
-
-### Ovoz Berish (Vote):
-* `/status` — Ovoz berish taymeri holati
-* `/voted` — Ovoz berilganini qo'lda tasdiqlash
-* `/vote` — Ovoz berish havolasi
-
-### Faqat Admin uchun:
-* `/admin` — Admin boshqaruv paneli
-* `/stats` — Foydalanuvchilar va botlar to'liq statistikasi
-* `/grant [chat_id] [kunlar]` — Foydalanuvchiga obuna muddati berish
-* `/ban [chat_id]` — Foydalanuvchini bloklash
-* `/unban [chat_id]` — Blokdan chiqarish
-* `/users` — Barcha foydalanuvchilar ro'yxati
-
----
-
-## 🧪 Testlarni Ishga Tushirish
-
-Barcha 72 ta unit testlarni tekshirish uchun:
-```bash
-python -m unittest discover tests
+npm test
 ```

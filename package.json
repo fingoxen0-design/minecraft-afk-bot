@@ -1,10 +1,11 @@
 {
   "name": "minecraft-afk-bot",
   "version": "1.0.0",
-  "description": "Minecraft 24/7 AFK Bot with Mineflayer and Telegram integration",
-  "main": "minecraft_bot.js",
+  "description": "Minecraft 24/7 Headless AFK Bot with Mineflayer and Render Web Dashboard",
+  "main": "bot.js",
   "scripts": {
-    "start": "node minecraft_bot.js"
+    "start": "node bot.js",
+    "test": "node --test tests/*.test.js"
   },
   "dependencies": {
     "minecraft-protocol": "^1.68.0",

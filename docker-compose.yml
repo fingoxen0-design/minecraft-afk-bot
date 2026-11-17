@@ -1,10 +1,9 @@
 version: '3.8'
 
 services:
-  # Asosiy Vote Bot xizmati (Server A)
-  vote-bot:
+  mc-afk-bot:
     build: .
-    container_name: mc_vote_bot
+    container_name: mc_afk_bot
     restart: always
     env_file:
       - .env
@@ -12,22 +11,9 @@ services:
       - "8080:8080"
     volumes:
       - ./vote_state.json:/app/vote_state.json
-      - ./users.json:/app/users.json
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 5s
-
-  # Watchdog Monitoring xizmati (Ikkinchi serverda yoki alohida konteynerda ishga tushirish uchun)
-  # Agar ikkinchi alohida serverda ishlatilsa, ushbu xizmatni o'sha ikkinchi serverda ishga tushirasiz:
-  # docker compose run watchdog
-  watchdog:
-    build: .
-    container_name: mc_vote_watchdog
-    restart: always
-    env_file:
-      - .env
-    command: ["python", "watchdog.py"]
-    profiles: ["watchdog"]
