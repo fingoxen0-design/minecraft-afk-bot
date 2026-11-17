@@ -229,6 +229,19 @@ class Minecraft247Bot {
       }
 
       if (fgCount > 25 && maxX >= minX && maxY >= minY) {
+        // Map ASCII rasmini konsolga chiqarish
+        const asciiLines = [];
+        const stepY = (maxY - minY > 50) ? 2 : 1;
+        const stepX = (maxX - minX > 90) ? 2 : 1;
+        for (let y = minY; y <= maxY; y += stepY) {
+          let line = '';
+          for (let x = minX; x <= maxX; x += stepX) {
+            line += (buf[y * cols + x] !== bg) ? '#' : '.';
+          }
+          asciiLines.push(line);
+        }
+        console.log(`[Mineflayer] [MAP_ASCII] bbox=[${minX},${minY} -> ${maxX},${maxY}], fg=${fgCount}\n${asciiLines.join('\n')}`);
+
         // Raqamlar OCR
         const { recognizeDigits } = require('./minecraft_bot');
         if (typeof recognizeDigits === 'function') {

@@ -444,7 +444,7 @@ function classifyDigit(isFgFn, minX, maxX, minY, maxY) {
   const ratio = w / h;
 
   // Single stroke (vertical or slanted bar with no branches or loops) is '1'
-  if (ratio < 0.35 || isSingleStroke(isFgFn, minX, maxX, minY, maxY)) {
+  if (ratio < 0.45 && isSingleStroke(isFgFn, minX, maxX, minY, maxY)) {
     return '1';
   }
 
@@ -593,10 +593,10 @@ function recognizeDigits(cols, rows, buf, bg, minX, maxX, minY, maxY) {
         const dist = smoothed[i].x - lastSplit;
         const distToEnd = maxX - smoothed[i].x;
 
-        if (dist >= 6 && distToEnd >= 6) {
+        if (dist >= 10 && distToEnd >= 10) {
           const leftPeak = Math.max(...smoothed.slice(Math.max(0, i - 12), i).map(s => s.val));
           const rightPeak = Math.max(...smoothed.slice(i + 1, Math.min(smoothed.length, i + 13)).map(s => s.val));
-          if (cur < leftPeak * 0.85 && cur < rightPeak * 0.85) {
+          if (cur <= 2 || (cur < leftPeak * 0.45 && cur < rightPeak * 0.45)) {
             splitPoints.push(smoothed[i].x);
           }
         }
