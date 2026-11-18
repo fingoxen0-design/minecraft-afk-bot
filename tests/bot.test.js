@@ -11,11 +11,10 @@ test('Minecraft247Bot - initialization and status', () => {
   assert.strictEqual(status.bot.host, 'allaysmp.pro');
   assert.strictEqual(status.vote.total_slots, 4);
 
-  // Multi-bot assertions
+  // Bot assertions
   assert.ok(Array.isArray(status.bots));
-  assert.strictEqual(status.bots.length, 2);
+  assert.strictEqual(status.bots.length, 1);
   assert.strictEqual(status.bots[0].username, 'Gotto');
-  assert.strictEqual(status.bots[1].username, 'fingoxenPro');
 });
 
 test('Minecraft247Bot - web actions routing', () => {

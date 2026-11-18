@@ -464,7 +464,6 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
                         <select id="chat-target" class="search-box" style="width: 140px; cursor: pointer;">
                             <option value="all">Barchasi (All)</option>
                             <option value="Gotto">Gotto</option>
-                            <option value="fingoxenPro">fingoxenPro</option>
                         </select>
                         <input type="text" id="chat-msg" class="chat-input" placeholder="Xabar yoki buyruq..." onkeydown="if(event.key==='Enter') sendChatMessage()">
                         <button class="btn-action-primary" onclick="sendChatMessage()">Yuborish</button>

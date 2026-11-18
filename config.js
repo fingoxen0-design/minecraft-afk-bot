@@ -33,16 +33,10 @@ module.exports = {
   MC_SUBSERVER: process.env.MC_SUBSERVER || 'economy',
   MC_USERNAME: process.env.MC_USERNAME || 'Gotto',
   MC_PASSWORD: process.env.MC_PASSWORD || 'bunyod',
-  MC_USERNAME_2: process.env.MC_USERNAME_2 || 'fingoxenPro',
-  MC_PASSWORD_2: process.env.MC_PASSWORD_2 || 'bunyod20090406',
   BOT_ACCOUNTS: [
     {
       username: process.env.MC_USERNAME || 'Gotto',
       password: process.env.MC_PASSWORD || 'bunyod'
-    },
-    {
-      username: process.env.MC_USERNAME_2 || 'fingoxenPro',
-      password: process.env.MC_PASSWORD_2 || 'bunyod20090406'
     }
   ],
   AUTO_AFK_ON_BOOT: (process.env.AUTO_AFK_ON_BOOT || 'true').toLowerCase() === 'true',
