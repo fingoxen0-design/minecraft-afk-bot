@@ -39,6 +39,8 @@ class Minecraft247Bot {
     // Captcha & Safety State
     this.hasLoggedIn = false;
     this.isCaptchaPending = false;
+    this.lastCaptchaPng = null;
+    this.lastCaptchaTime = 0;
     this.lastSubmittedCaptcha = null;
     this.lastSubmittedCaptchaTime = 0;
     this.lastSolvedMapHash = null;
@@ -53,7 +55,8 @@ class Minecraft247Bot {
       config.PORT,
       config.HOST,
       () => this.getSystemStatus(),
-      (path, payload) => this.handleWebAction(path, payload)
+      (path, payload) => this.handleWebAction(path, payload),
+      this
     );
   }
 
@@ -78,7 +81,10 @@ class Minecraft247Bot {
         username: config.MC_USERNAME,
         host: config.MC_HOST,
         subserver: config.MC_SUBSERVER,
-        manual_stopped: this.manualStopped
+        manual_stopped: this.manualStopped,
+        captchaPending: this.isCaptchaPending,
+        hasCaptchaPng: !!this.lastCaptchaPng,
+        lastCaptchaTime: this.lastCaptchaTime
       },
       vote: this.tracker.getSummary(),
       config: {
@@ -102,6 +108,15 @@ class Minecraft247Bot {
       this.manualStopped = true;
       this.stopBot();
       return { success: true, message: 'Bot to\'xtatildi' };
+    }
+
+    if (actionPath === '/api/captcha/solve') {
+      const code = (payload && payload.code) ? String(payload.code).trim() : '';
+      if (!code) return { success: false, message: 'Kod kiritilmagan' };
+      console.log(`[Mineflayer] Veb panel orqali captcha kodi kiritildi: "${code}"`);
+      const ok = this.safeChat(code);
+      this.isCaptchaPending = false;
+      return { success: ok, message: ok ? `Kod yuborildi: ${code}` : 'Bot faol emas' };
     }
 
     if (actionPath === '/api/bot/chat') {
@@ -179,7 +194,7 @@ class Minecraft247Bot {
     }, 45000); // Har 45 soniyada yengil harakat
   }
 
-  // Map Captcha Pikselli OCR Tahlili
+  // Map Captcha Pikselli OCR Tahlili va Veb Paneli
   handleMapCaptcha(data) {
     try {
       if (!data || !data.data) return;
@@ -192,104 +207,39 @@ class Minecraft247Bot {
       const mapHash = crypto.createHash('md5').update(buf).digest('hex');
       const now = Date.now();
 
-      // Takroriy paketlarni va tez-tez yuborishni cheklash (kamida 6 soniya tanaffus)
-      if ((this.lastSolvedMapHash === mapHash && (now - this.lastSolvedMapTime < 60000)) || (now - this.lastMapProcessTime < 6000)) {
+      // Takroriy paketlarni va tez-tez yuborishni cheklash (kamida 5 soniya tanaffus)
+      if ((this.lastSolvedMapHash === mapHash && (now - this.lastSolvedMapTime < 60000)) || (now - this.lastMapProcessTime < 5000)) {
         return;
       }
       this.lastMapProcessTime = now;
       this.isCaptchaPending = true;
+      this.lastCaptchaTime = now;
 
-      // Eng ko'p uchragan rangni fon (background) deb olamiz
-      const freq = {};
-      for (let i = 0; i < len; i++) {
-        const c = buf[i];
-        freq[c] = (freq[c] || 0) + 1;
-      }
-      console.log(`[Mineflayer] [MAP_COLORS] ${JSON.stringify(freq)}`);
+      // 1. Toza 256x256 PNG yaratish va Veb interfeys uchun saqlash
+      const { createMapPng, solveMapWithOcr } = require('./captchaSolver');
+      this.lastCaptchaPng = createMapPng(cols, rows, buf, 2);
+      console.log(`[Mineflayer] [MAP_CAPTCHA] 256x256 PNG yaratildi (${this.lastCaptchaPng ? this.lastCaptchaPng.length : 0} bayt). Veb panelda jonli ko'rinadi: /api/captcha.png`);
 
-      // Multi-color ASCII visualization
-      const sortedColors = Object.entries(freq).sort((a, b) => b[1] - a[1]);
-      const colorChar = {};
-      colorChar[sortedColors[0][0]] = ' '; // Asosiy fon bo'sh joy
-      if (sortedColors[1] && sortedColors[1][1] > 1200) {
-        colorChar[sortedColors[1][0]] = '.'; // Qalqon / ramka foni
-      }
-      const palette = ['#', '@', '%', '*', '+', '=', 'O', 'X', 'M', 'W', 'Z'];
-      let palIdx = 0;
-      for (const [col] of sortedColors) {
-        if (!colorChar[col]) {
-          colorChar[col] = palette[palIdx++ % palette.length];
+      // 2. Avtomatik OCR tahlili
+      solveMapWithOcr(this.lastCaptchaPng).then((ocrCode) => {
+        if (ocrCode && ocrCode.length >= 3 && ocrCode.length <= 6) {
+          console.log(`[Mineflayer] [MAP_OCR_SUCCESS] OCR orqali captcha kodi aniqlandi: "${ocrCode}"`);
+          this.safeTimeout(() => {
+            if (this.isCaptchaPending) {
+              this.lastSubmittedCaptcha = ocrCode;
+              this.lastSubmittedCaptchaTime = Date.now();
+              this.lastSolvedMapHash = mapHash;
+              this.lastSolvedMapTime = Date.now();
+              console.log(`[Mineflayer] Captcha kodi yuborilmoqda: "${ocrCode}"`);
+              this.safeChat(ocrCode);
+            }
+          }, 1200);
+        } else {
+          console.log(`[Mineflayer] [MAP_OCR_PENDING] OCR kutmoqda yoki veb interfeys orqali kiritish mumkin: ${config.SERVER_PUBLIC_URL}`);
         }
-      }
-
-      const mapLines = [];
-      for (let y = 0; y < rows; y += 2) {
-        let line = '';
-        for (let x = 0; x < cols; x += 2) {
-          const c = buf[y * cols + x];
-          line += colorChar[c] || '?';
-        }
-        mapLines.push(line);
-      }
-      console.log(`[Mineflayer] [COLOR_ASCII]\n${mapLines.join('\n')}`);
-
-      let bg = null;
-      let maxCount = 0;
-      for (const c in freq) {
-        if (freq[c] > maxCount) {
-          maxCount = freq[c];
-          bg = Number(c);
-        }
-      }
-
-      let minX = cols, maxX = 0, minY = rows, maxY = 0;
-      let fgCount = 0;
-      for (let y = 0; y < rows; y++) {
-        for (let x = 0; x < cols; x++) {
-          if (buf[y * cols + x] !== bg) {
-            fgCount++;
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
-          }
-        }
-      }
-
-      if (fgCount > 25 && maxX >= minX && maxY >= minY) {
-        // Map ASCII rasmini konsolga chiqarish
-        const asciiLines = [];
-        const stepY = (maxY - minY > 50) ? 2 : 1;
-        const stepX = (maxX - minX > 90) ? 2 : 1;
-        for (let y = minY; y <= maxY; y += stepY) {
-          let line = '';
-          for (let x = minX; x <= maxX; x += stepX) {
-            line += (buf[y * cols + x] !== bg) ? '#' : '.';
-          }
-          asciiLines.push(line);
-        }
-        console.log(`[Mineflayer] [MAP_ASCII] bbox=[${minX},${minY} -> ${maxX},${maxY}], fg=${fgCount}\n${asciiLines.join('\n')}`);
-
-        // Raqamlar OCR
-        const { recognizeDigits } = require('./minecraft_bot');
-        if (typeof recognizeDigits === 'function') {
-          const code = recognizeDigits(cols, rows, buf, bg, minX, maxX, minY, maxY);
-          if (code && code.length >= 1) {
-            this.lastSolvedMapHash = mapHash;
-            this.lastSolvedMapTime = Date.now();
-            console.log(`[Mineflayer] [MAP_SOLVER] Xarita captcha kodi aniqlandi: "${code}"`);
-
-            this.safeTimeout(() => {
-              if (Date.now() - this.lastSubmittedCaptchaTime > 5000) {
-                this.lastSubmittedCaptchaTime = Date.now();
-                this.lastSubmittedCaptcha = code;
-                console.log(`[Mineflayer] Captcha kodi yuborilmoqda: "${code}"`);
-                this.safeChat(code);
-              }
-            }, 1000);
-          }
-        }
-      }
+      }).catch(err => {
+        console.error(`[Mineflayer] OCR tahlilida xato: ${err.message}`);
+      });
     } catch (err) {
       console.error(`[Mineflayer] Map Captcha tahlilida xato: ${err.message}`);
     }
@@ -382,6 +332,11 @@ class Minecraft247Bot {
       console.log(`[Mineflayer] [MSG] ${clean}`);
 
       const lower = clean.toLowerCase();
+
+      // Captcha yechilganini aniqlash
+      if (lower.includes('solved') || lower.includes('welcome') || lower.includes('sending you to') || lower.includes('successfully') || lower.includes('logged in')) {
+        this.isCaptchaPending = false;
+      }
 
       // Economy serverga tushganini aniqlash (allaysmp umumiy so'zini tekshirmaymiz!)
       const sub = (config.MC_SUBSERVER || 'economy').toLowerCase();

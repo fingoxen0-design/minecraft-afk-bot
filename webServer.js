@@ -360,6 +360,27 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
         </div>
     </div>
 
+    <!-- Live Captcha Alert Card -->
+    <div id="captcha-alert-banner" style="display: none; background: #2b1117; border: 2px solid #f85149; border-radius: 8px; padding: 14px 18px; margin: 10px 18px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+            <div style="font-weight: 700; color: #ff7b72; font-size: 15px; display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 18px;">🚨</span> ALLAYSMP XARITA CAPTCHA TALAB QILINDI!
+            </div>
+            <span style="font-size: 12px; color: #8b949e;">Server 30 soniya kutadi</span>
+        </div>
+        <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+            <img id="captcha-img" src="/api/captcha.png" alt="Captcha Xaritasi" style="width: 256px; height: 256px; image-rendering: pixelated; border: 2px solid #58a6ff; border-radius: 6px; background: #fff;">
+            <div style="display: flex; flex-direction: column; gap: 12px; max-width: 340px;">
+                <p style="font-size: 13px; color: #c9d1d9;">Xaritadagi <b>4 ta belgi</b>ni yozing va Yuborishni bosing (yoki Enter):</p>
+                <div style="display: flex; gap: 8px;">
+                    <input id="captcha-input" type="text" placeholder="4 ta belgi..." maxlength="6" style="padding: 10px 14px; font-size: 18px; font-weight: bold; letter-spacing: 4px; text-transform: uppercase; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #fff; width: 170px; text-align: center; outline: none;" onkeydown="if(event.key==='Enter') submitCaptchaCode()">
+                    <button class="tool-btn" style="background: #238636; color: #fff; border-color: #2ea043; padding: 10px 18px; font-size: 14px; font-weight: 600;" onclick="submitCaptchaCode()">✅ Yuborish</button>
+                </div>
+                <div id="captcha-feedback" style="font-size: 12px; color: #58a6ff;"></div>
+            </div>
+        </div>
+    </div>
+
     <main>
         <div id="view-terminal" class="view active">
             <div id="terminal-view"><div class="log-line log-system">Loglar yuklanmoqda...</div></div>
@@ -572,6 +593,17 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
                             document.getElementById("stat-bot-status").innerText = b.status === 'afk_active' ? "AFK Onlayn 🟢" : (b.status || "Noma'lum");
                             document.getElementById("stat-bot-server").innerText = \`Server: \${b.host || 'allaysmp.pro'} (\${b.server || 'economy'}) | Nik: \${b.username || 'Gotto'}\`;
                             document.getElementById("stat-bot-uptime").innerText = \`Ish vaqti: \${b.uptime_text || '0s'}\`;
+
+                            const banner = document.getElementById('captcha-alert-banner');
+                            if (b.captchaPending) {
+                                if (banner.style.display !== 'block') {
+                                    banner.style.display = 'block';
+                                    document.getElementById('captcha-img').src = '/api/captcha.png?t=' + Date.now();
+                                    setTimeout(() => document.getElementById('captcha-input').focus(), 150);
+                                }
+                            } else {
+                                banner.style.display = 'none';
+                            }
                         }
 
                         if (d.vote && d.vote.votes) {
@@ -585,6 +617,25 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
                     }
                 })
                 .catch(err => console.error("Logs fetch error:", err));
+        }
+
+        function submitCaptchaCode() {
+            const input = document.getElementById('captcha-input');
+            const code = input.value.trim();
+            if (!code) return;
+            const fb = document.getElementById('captcha-feedback');
+            fb.innerText = 'Yuborilmoqda...';
+            fetch('/api/captcha/solve', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: code })
+            }).then(r => r.json()).then(d => {
+                fb.innerText = d.message || 'Yuborildi!';
+                input.value = '';
+                fetchLogs();
+            }).catch(e => {
+                fb.innerText = 'Xatolik: ' + e.message;
+            });
         }
 
         function recordVote(slotId) {
@@ -625,11 +676,12 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
 </html>`;
 
 class WebServer {
-  constructor(port = config.PORT, host = config.HOST, getStatusCallback = null, actionCallback = null) {
+  constructor(port = config.PORT, host = config.HOST, getStatusCallback = null, actionCallback = null, supervisor = null) {
     this.port = port;
     this.host = host;
     this.getStatusCallback = getStatusCallback;
     this.actionCallback = actionCallback;
+    this.supervisor = supervisor;
     this.server = null;
     this.startTime = Date.now();
     this.keepAliveTimer = null;
@@ -658,6 +710,27 @@ class WebServer {
             'Content-Length': body.length
           });
           res.end(body);
+          return;
+        }
+
+        if (cleanPath === '/api/captcha.png' || cleanPath === '/api/captcha/image') {
+          const png = (this.supervisor && this.supervisor.lastCaptchaPng) ? this.supervisor.lastCaptchaPng : null;
+          if (png) {
+            res.writeHead(200, {
+              'Content-Type': 'image/png',
+              'Content-Length': png.length,
+              'Cache-Control': 'no-cache, no-store, must-revalidate'
+            });
+            res.end(png);
+            return;
+          }
+          const blankPng = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c63000100000500010d0a2d0000000049454e44ae426082', 'hex');
+          res.writeHead(200, {
+            'Content-Type': 'image/png',
+            'Content-Length': blankPng.length,
+            'Cache-Control': 'no-cache'
+          });
+          res.end(blankPng);
           return;
         }
 
