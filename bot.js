@@ -107,7 +107,18 @@ class SingleBotInstance {
       manual_stopped: this.manualStopped,
       captchaPending: this.isCaptchaPending,
       hasCaptchaPng: !!this.lastCaptchaPng,
-      lastCaptchaTime: this.lastCaptchaTime
+      lastCaptchaTime: this.lastCaptchaTime,
+      position: this.bot && this.bot.entity ? {
+        x: Math.round(this.bot.entity.position.x),
+        y: Math.round(this.bot.entity.position.y),
+        z: Math.round(this.bot.entity.position.z)
+      } : null,
+      nearby_players: (this.bot && this.bot.entities && this.bot.entity) ? Object.values(this.bot.entities)
+        .filter(e => e.type === 'player' && e.username && e.username !== this.username && e.position)
+        .map(e => ({
+          username: e.username,
+          distance: Math.round(this.bot.entity.position.distanceTo(e.position))
+        })) : []
     };
   }
 
