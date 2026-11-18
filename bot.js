@@ -307,28 +307,40 @@ class SingleBotInstance {
       }, 3500);
     });
 
+    const handleOwnerCommand = (sender, text) => {
+      const uLower = (sender || '').toLowerCase();
+      const isOwner = (config.MC_OWNERS || []).some(o => uLower.includes(o) || o.includes(uLower));
+      if (!isOwner) return false;
+
+      const mLower = (text || '').trim().toLowerCase();
+      if (['!tpa', 'tpa', '/tpa', '!tp', 'tp', '/tp', '!come', 'kel'].includes(mLower)) {
+        console.log(`[Mineflayer:${this.username}] [OWNER_CMD] ${sender} dan TPA chaqiruvi, /tpa ${sender} yuborilmoqda...`);
+        this.safeChat(`/tpa ${sender}`);
+        return true;
+      } else if (['!tpaccept', 'tpaccept', 'qabul'].includes(mLower)) {
+        console.log(`[Mineflayer:${this.username}] [OWNER_CMD] /tpaccept yuborilmoqda...`);
+        this.safeChat('/tpaccept');
+        return true;
+      } else if (mLower === '!afk') {
+        console.log(`[Mineflayer:${this.username}] [OWNER_CMD] /afk yuborilmoqda...`);
+        this.safeChat('/afk');
+        return true;
+      }
+      return false;
+    };
+
     bot.on('chat', (username, message) => {
       if (username === bot.username) return;
       this.lastMessage = `${username}: ${message}`;
       console.log(`[Mineflayer:${this.username}] [CHAT] <${username}> ${message}`);
+      handleOwnerCommand(username, message);
+    });
 
-      // Owner chat buyruqlari
-      const uLower = (username || '').toLowerCase();
-      const isOwner = (config.MC_OWNERS || []).some(o => uLower.includes(o) || o.includes(uLower));
-      const mLower = (message || '').trim().toLowerCase();
-
-      if (isOwner) {
-        if (mLower === '!tpa' || mLower === 'tpa' || mLower === '/tpa' || mLower === '!come' || mLower === 'kel') {
-          console.log(`[Mineflayer:${this.username}] [OWNER_CMD] ${username} dan TPA chaqiruvi, /tpa ${username} yuborilmoqda...`);
-          this.safeChat(`/tpa ${username}`);
-        } else if (mLower === '!tpaccept' || mLower === 'tpaccept' || mLower === 'qabul') {
-          console.log(`[Mineflayer:${this.username}] [OWNER_CMD] /tpaccept yuborilmoqda...`);
-          this.safeChat('/tpaccept');
-        } else if (mLower === '!afk') {
-          console.log(`[Mineflayer:${this.username}] [OWNER_CMD] /afk yuborilmoqda...`);
-          this.safeChat('/afk');
-        }
-      }
+    bot.on('whisper', (username, message) => {
+      if (username === bot.username) return;
+      this.lastMessage = `${username} (whisper): ${message}`;
+      console.log(`[Mineflayer:${this.username}] [WHISPER] <${username}> ${message}`);
+      handleOwnerCommand(username, message);
     });
 
     bot.on('messagestr', (message) => {
@@ -349,6 +361,14 @@ class SingleBotInstance {
             this.safeChat('/tpaccept');
           }, 1000);
         }
+      }
+
+      // Agar /msg orqali egadan buyruq kelsa (!tp, !tpa, kel, !afk)
+      const isOwnerMsg = (config.MC_OWNERS || []).some(o => lower.includes(o)) || lower.includes('fingoxen');
+      if (isOwnerMsg && (lower.includes('-> me') || lower.includes('whisper') || lower.includes('-> gotto') || lower.includes('[msg]'))) {
+        const parts = clean.split(':');
+        const text = parts.length > 1 ? parts.slice(1).join(':').trim() : clean;
+        handleOwnerCommand('Fingoxenpro', text);
       }
 
       // Captcha yechilganini aniqlash
