@@ -223,7 +223,8 @@ class VoteTracker {
       last_vote_time: this.formatTimestamp(slot.last_vote_timestamp),
       next_vote_time: this.formatTimestamp(slot.next_vote_timestamp),
       cooldown_hours: slot.cooldown_hours || this.defaultCooldownHours,
-      total_votes: slot.total_votes_recorded || 0
+      total_votes: slot.total_votes_recorded || 0,
+      alert_sent: !!slot.alert_sent
     };
   }
 

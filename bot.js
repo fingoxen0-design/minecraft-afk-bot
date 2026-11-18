@@ -14,11 +14,42 @@ const { WebServer, globalLogBuffer } = require('./webServer');
 const { createMapPng, solveMapWithOcr } = require('./captchaSolver');
 
 process.on('uncaughtException', (err) => {
-  if (err && (err.name === 'PartialReadError' || (err.message && err.message.includes('PartialReadError')))) {
+  const msg = err ? (err.message || String(err)) : '';
+  if (err && (err.name === 'PartialReadError' || msg.includes('PartialReadError') || msg.includes('timed out after') || msg.includes('Missing characters') || msg.includes('ECONNRESET'))) {
     return;
   }
   console.error('[UncaughtException]', err ? err.message : err);
 });
+
+// Minecraft NBT/Compound matnlaridan toza, tushunarli matnni ajratib olish
+function extractCleanText(obj) {
+  if (!obj) return '';
+  if (typeof obj === 'string') {
+    return obj.replace(/§[0-9a-fk-or]/gi, '').trim();
+  }
+  if (typeof obj === 'number' || typeof obj === 'boolean') {
+    return String(obj);
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(extractCleanText).filter(Boolean).join('');
+  }
+  if (typeof obj === 'object') {
+    let res = '';
+    if (obj.text && typeof obj.text === 'string') {
+      res += obj.text.replace(/§[0-9a-fk-or]/gi, '');
+    } else if (obj.text) {
+      res += extractCleanText(obj.text);
+    }
+    if (obj.value) {
+      res += extractCleanText(obj.value);
+    }
+    if (obj.extra) {
+      res += extractCleanText(obj.extra);
+    }
+    return res.trim();
+  }
+  return '';
+}
 
 class SingleBotInstance {
   constructor(account, supervisor) {
@@ -203,7 +234,7 @@ class SingleBotInstance {
       username: this.username,
       version: config.MC_VERSION || false,
       auth: 'offline',
-      checkTimeoutInterval: 45000,
+      checkTimeoutInterval: 120000,
       keepAlive: true,
       hideErrors: false
     };
@@ -326,8 +357,11 @@ class SingleBotInstance {
     bot._client.on('packet', (data, meta) => {
       const name = meta ? meta.name : '';
 
-      if (['title', 'set_title_text', 'set_title_subtitle', 'set_action_bar_text', 'boss_bar'].includes(name)) {
-        console.log(`[Mineflayer:${this.username}] [PACKET:${name}] ${JSON.stringify(data)}`);
+      if (['title', 'set_title_text', 'set_title_subtitle', 'set_action_bar_text'].includes(name)) {
+        const text = extractCleanText(data);
+        if (text && text.length > 0 && !text.includes('{"type"')) {
+          console.log(`[Mineflayer:${this.username}] [TITLE] ${text}`);
+        }
       }
 
       // Map Captcha
@@ -576,12 +610,13 @@ class Minecraft247Bot {
       this.webServer.startKeepAlive(config.SERVER_PUBLIC_URL, config.KEEP_ALIVE_INTERVAL);
     }
 
-    // 3. 4 ta Vote eslatma sikli
+    // 3. Ovoz Berish (Vote) eslatma sikli (faqat manzili bor serverlar uchun)
     setInterval(() => {
       for (const v of this.tracker.getAllVotes()) {
-        if (this.tracker.isTimeToVote(v.id) && !v.alert_sent) {
+        const rawSlot = this.tracker.state.votes && this.tracker.state.votes[String(v.id)];
+        if (v.url && v.url.trim() && this.tracker.isTimeToVote(v.id) && rawSlot && !rawSlot.alert_sent) {
           console.log(`[VoteTracker] 🗳 DIQQAT: ${v.name} saytida ovoz berish vaqti keldi! (${v.url})`);
-          this.tracker.state.votes[String(v.id)].alert_sent = true;
+          rawSlot.alert_sent = true;
           this.tracker.saveState();
         }
       }
@@ -617,5 +652,7 @@ process.on('SIGTERM', () => {
 if (require.main === module) {
   botInstance.start();
 }
+
+Minecraft247Bot.extractCleanText = extractCleanText;
 
 module.exports = Minecraft247Bot;

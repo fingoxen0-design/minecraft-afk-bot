@@ -53,5 +53,5 @@ module.exports = {
   HOST: process.env.HEALTH_HOST || '0.0.0.0',
   SERVER_PUBLIC_URL: (process.env.RENDER_EXTERNAL_URL || process.env.SERVER_PUBLIC_URL || 'https://minecraft-afk-bot-y7ak.onrender.com').replace(/\/$/, ''),
   ENABLE_KEEP_ALIVE: (process.env.ENABLE_KEEP_ALIVE || 'true').toLowerCase() === 'true',
-  KEEP_ALIVE_INTERVAL: parseInt(process.env.KEEP_ALIVE_INTERVAL || '600', 10)
+  KEEP_ALIVE_INTERVAL: parseInt(process.env.KEEP_ALIVE_INTERVAL || '180', 10)
 };

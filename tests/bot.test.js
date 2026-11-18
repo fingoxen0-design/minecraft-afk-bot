@@ -34,3 +34,25 @@ test('Minecraft247Bot - web actions routing', () => {
   assert.strictEqual(urlRes.success, true);
   assert.strictEqual(bot.tracker.getVoteUrl(2), 'https://test2.com');
 });
+
+test('Minecraft247Bot - clean text extraction from NBT/Compound', () => {
+  const extractCleanText = Minecraft247Bot.extractCleanText;
+  assert.ok(typeof extractCleanText === 'function');
+
+  const compound1 = {
+    text: {
+      type: 'compound',
+      value: {
+        color: { type: 'string', value: 'red' },
+        text: { type: 'string', value: 'You are already logged in!' }
+      }
+    }
+  };
+  assert.strictEqual(extractCleanText(compound1), 'You are already logged in!');
+
+  const emptyCompound = { text: { type: 'string', value: '' } };
+  assert.strictEqual(extractCleanText(emptyCompound), '');
+
+  const formattedStr = '§aWELCOME§r to §6AllaySMP!';
+  assert.strictEqual(extractCleanText(formattedStr), 'WELCOME to AllaySMP!');
+});

@@ -867,26 +867,30 @@ class WebServer {
   startKeepAlive(externalUrl = config.SERVER_PUBLIC_URL, intervalSec = config.KEEP_ALIVE_INTERVAL) {
     if (!externalUrl) return;
     const target = `${externalUrl.replace(/\/$/, '')}/health`;
-    console.log(`[KeepAlive] Render anti-sleep tizimi yoqildi: ${target} (har ${Math.floor(intervalSec / 60)} daqiqada)`);
+    console.log(`[KeepAlive] 24/7 Render anti-sleep tizimi faol: ${target} (har ${Math.round(intervalSec / 60)} daqiqada)`);
 
     const ping = () => {
       try {
         const client = target.startsWith('https') ? https : http;
-        client.get(target, { headers: { 'User-Agent': 'Render-KeepAlive/1.0' }, timeout: 15000 }, (res) => {
+        const req = client.get(target, { headers: { 'User-Agent': 'Render-KeepAlive/2.0' }, timeout: 15000 }, (res) => {
           if (res.statusCode === 200) {
             console.log('[KeepAlive] Render uyg\'oq saqlandi (Status: 200 OK)');
           } else {
             console.log(`[KeepAlive] Kutilmagan status: ${res.statusCode}`);
           }
-        }).on('error', (err) => {
+        });
+        req.on('error', (err) => {
           console.log(`[KeepAlive] Ping ogohlantirishi: ${err.message}`);
+        });
+        req.on('timeout', () => {
+          req.destroy();
         });
       } catch (err) {
         console.log(`[KeepAlive] Xatolik: ${err.message}`);
       }
     };
 
-    setTimeout(ping, 20000);
+    setTimeout(ping, 10000);
     this.keepAliveTimer = setInterval(ping, intervalSec * 1000);
   }
 
