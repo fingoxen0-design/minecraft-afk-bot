@@ -69,6 +69,7 @@ class SingleBotInstance {
     this.manualStopped = false;
     this.reconnectTimer = null;
     this.antiKickInterval = null;
+    this.watchdogInterval = null;
     this.pendingTimers = [];
 
     // Captcha & Safety State
@@ -126,6 +127,10 @@ class SingleBotInstance {
       clearInterval(this.antiKickInterval);
       this.antiKickInterval = null;
     }
+    if (this.watchdogInterval) {
+      clearInterval(this.watchdogInterval);
+      this.watchdogInterval = null;
+    }
   }
 
   safeChat(message) {
@@ -159,6 +164,21 @@ class SingleBotInstance {
         }
       } catch (_) {}
     }, 45000); // Har 45 soniyada yengil harakat
+  }
+
+  startWatchdog() {
+    if (this.watchdogInterval) clearInterval(this.watchdogInterval);
+    this.watchdogInterval = setInterval(() => {
+      if (!this.bot || this.manualStopped || this.isCaptchaPending) return;
+      // Agar bot Lobbiyda qolib ketgan bo'lsa yoki afk_active bo'lmasa, qayta tiklash
+      if (this.status !== 'afk_active' || !this.isAfk || this.currentServer !== config.MC_SUBSERVER) {
+        console.log(`[Watchdog:${this.username}] Bot AFK rejimida emas (${this.status}, server: ${this.currentServer}). Subserver va AFK qayta tiklanmoqda...`);
+        this.safeChat(`/server ${config.MC_SUBSERVER}`);
+        this.safeTimeout(() => {
+          this.safeChat('/afk');
+        }, 3500);
+      }
+    }, 40000); // Har 40 soniyada holatni tekshiradi
   }
 
   handleMapCaptcha(data) {
@@ -254,6 +274,7 @@ class SingleBotInstance {
     bot.once('spawn', () => {
       console.log(`[Mineflayer:${this.username}] Muvaffaqiyatli serverga ulandi! (Server: ${this.currentServer})`);
       this.status = 'logged_in';
+      this.startWatchdog();
 
       this.safeTimeout(() => {
         if (!this.hasLoggedIn && this.password) {
@@ -290,6 +311,24 @@ class SingleBotInstance {
       if (username === bot.username) return;
       this.lastMessage = `${username}: ${message}`;
       console.log(`[Mineflayer:${this.username}] [CHAT] <${username}> ${message}`);
+
+      // Owner chat buyruqlari
+      const uLower = (username || '').toLowerCase();
+      const isOwner = (config.MC_OWNERS || []).some(o => uLower.includes(o) || o.includes(uLower));
+      const mLower = (message || '').trim().toLowerCase();
+
+      if (isOwner) {
+        if (mLower === '!tpa' || mLower === 'tpa' || mLower === '/tpa' || mLower === '!come' || mLower === 'kel') {
+          console.log(`[Mineflayer:${this.username}] [OWNER_CMD] ${username} dan TPA chaqiruvi, /tpa ${username} yuborilmoqda...`);
+          this.safeChat(`/tpa ${username}`);
+        } else if (mLower === '!tpaccept' || mLower === 'tpaccept' || mLower === 'qabul') {
+          console.log(`[Mineflayer:${this.username}] [OWNER_CMD] /tpaccept yuborilmoqda...`);
+          this.safeChat('/tpaccept');
+        } else if (mLower === '!afk') {
+          console.log(`[Mineflayer:${this.username}] [OWNER_CMD] /afk yuborilmoqda...`);
+          this.safeChat('/afk');
+        }
+      }
     });
 
     bot.on('messagestr', (message) => {
@@ -299,6 +338,18 @@ class SingleBotInstance {
       console.log(`[Mineflayer:${this.username}] [MSG] ${clean}`);
 
       const lower = clean.toLowerCase();
+
+      // TPA so'rovlarini egadan kelganda avtomatik qabul qilish (Auto-TPACCEPT)
+      const hasTpaPrompt = lower.includes('has requested') || lower.includes('teleport to you') || lower.includes('/tpaccept') || lower.includes('tpa') || lower.includes('teleport request');
+      if (hasTpaPrompt) {
+        const isOwner = (config.MC_OWNERS || []).some(o => lower.includes(o)) || lower.includes('fingoxen');
+        if (isOwner) {
+          console.log(`[Mineflayer:${this.username}] [AUTO-TPA] Egadan TPA so'rovi aniqlandi! 1 soniyada /tpaccept yuborilmoqda...`);
+          this.safeTimeout(() => {
+            this.safeChat('/tpaccept');
+          }, 1000);
+        }
+      }
 
       // Captcha yechilganini aniqlash
       if (lower.includes('solved') || lower.includes('welcome') || lower.includes('sending you to') || lower.includes('successfully') || lower.includes('logged in')) {

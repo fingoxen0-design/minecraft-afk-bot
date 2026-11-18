@@ -33,6 +33,7 @@ module.exports = {
   MC_SUBSERVER: process.env.MC_SUBSERVER || 'economy',
   MC_USERNAME: process.env.MC_USERNAME || 'Gotto',
   MC_PASSWORD: process.env.MC_PASSWORD || 'bunyod',
+  MC_OWNERS: (process.env.MC_OWNERS || 'Fingoxenpro,Fingoxen,Bunyod').split(',').map(s => s.trim().toLowerCase()),
   BOT_ACCOUNTS: [
     {
       username: process.env.MC_USERNAME || 'Gotto',
