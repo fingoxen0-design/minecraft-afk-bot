@@ -338,6 +338,15 @@ class Minecraft247Bot {
         this.isCaptchaPending = false;
       }
 
+      // AFK hududiga tushganini aniqlash
+      if (lower.includes('teleported to the afk area') || lower.includes('afk area') || lower.includes('you are now afk')) {
+        this.isAfk = true;
+        this.currentServer = config.MC_SUBSERVER;
+        this.status = 'afk_active';
+        this.safeStartAfkMovement();
+        console.log('[Mineflayer] Bot rasman AFK hududida (afk_active)!');
+      }
+
       // Economy serverga tushganini aniqlash (allaysmp umumiy so'zini tekshirmaymiz!)
       const sub = (config.MC_SUBSERVER || 'economy').toLowerCase();
       if (lower.includes(`sending you to ${sub}`) || lower.includes(`connected to ${sub}`) || lower.includes(`joined ${sub}`) || lower.includes(`[${sub}]`)) {
