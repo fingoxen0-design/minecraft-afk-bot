@@ -352,14 +352,15 @@ class SingleBotInstance {
       const lower = clean.toLowerCase();
 
       // TPA so'rovlarini egadan kelganda avtomatik qabul qilish (Auto-TPACCEPT)
-      const hasTpaPrompt = lower.includes('has requested') || lower.includes('teleport to you') || lower.includes('/tpaccept') || lower.includes('tpa') || lower.includes('teleport request');
+      const hasTpaPrompt = lower.includes('sent you a tpa request') || lower.includes('has requested') || lower.includes('teleport to you') || lower.includes('/tpaccept') || lower.includes('tpa');
       if (hasTpaPrompt) {
         const isOwner = (config.MC_OWNERS || []).some(o => lower.includes(o)) || lower.includes('fingoxen');
         if (isOwner) {
-          console.log(`[Mineflayer:${this.username}] [AUTO-TPA] Egadan TPA so'rovi aniqlandi! 1 soniyada /tpaccept yuborilmoqda...`);
+          console.log(`[Mineflayer:${this.username}] [AUTO-TPA] Egadan TPA so'rovi aniqlandi! /tpaccept qilinmoqda...`);
           this.safeTimeout(() => {
+            this.safeChat('/tpaccept Fingoxenpro');
             this.safeChat('/tpaccept');
-          }, 1000);
+          }, 800);
         }
       }
 
