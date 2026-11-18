@@ -352,7 +352,7 @@ class SingleBotInstance {
       console.log(`[Mineflayer:${this.username}] 🚨 KICK: Serverdan chiqarildi! (${rText})`);
       this.status = 'kicked';
       this.cleanup();
-      this.scheduleReconnect(45000);
+      this.scheduleReconnect(12000);
     });
 
     bot.on('end', (reason) => {
