@@ -236,7 +236,7 @@ class SingleBotInstance {
       auth: 'offline',
       checkTimeoutInterval: 120000,
       keepAlive: true,
-      hideErrors: false
+      hideErrors: true
     };
 
     try {
