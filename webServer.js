@@ -528,12 +528,12 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
         }
 
         function copyLogs() {
-            var txt = allLogs.map(function(l) { return '[' + l.time + '] ' + l.message; }).join('\n');
+            var txt = allLogs.map(function(l) { return '[' + l.time + '] ' + l.message; }).join('\\n');
             navigator.clipboard.writeText(txt).then(function() { alert("Loglar nusxalandi!"); });
         }
 
         function downloadLogs() {
-            var txt = allLogs.map(function(l) { return '[' + l.time + '] ' + l.message; }).join('\n');
+            var txt = allLogs.map(function(l) { return '[' + l.time + '] ' + l.message; }).join('\\n');
             var blob = new Blob([txt], { type: "text/plain" });
             var url = URL.createObjectURL(blob);
             var a = document.createElement("a");
@@ -659,8 +659,6 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
                     }
                 })
                 .catch(function(err) { console.error("Logs fetch error:", err); });
-        }
-        }
         }
 
         function submitCaptchaCode() {
