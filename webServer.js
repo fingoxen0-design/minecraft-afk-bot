@@ -318,6 +318,23 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
             font-weight: 600;
             cursor: pointer;
         }
+        .quick-chip {
+            background: #21262d;
+            color: #58a6ff;
+            border: 1px solid var(--border);
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .quick-chip:hover {
+            background: #30363d;
+            color: #fff;
+            border-color: #58a6ff;
+            transform: translateY(-1px);
+        }
         footer {
             background: var(--header-bg);
             border-top: 1px solid var(--border);
@@ -468,6 +485,17 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
                         <input type="text" id="chat-msg" class="chat-input" placeholder="Xabar yoki buyruq..." onkeydown="if(event.key==='Enter') sendChatMessage()">
                         <button class="btn-action-primary" onclick="sendChatMessage()">Yuborish</button>
                     </div>
+                    <div class="quick-chips" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center;">
+                        <span style="font-size: 11px; color: var(--text-muted);">⚡️ Tezkor:</span>
+                        <button class="quick-chip" onclick="quickSend('/server economy')">/server economy</button>
+                        <button class="quick-chip" onclick="quickSend('/afk')">/afk</button>
+                        <button class="quick-chip" onclick="quickSend('/spawn')">/spawn</button>
+                        <button class="quick-chip" onclick="quickSend('/balance')">/balance</button>
+                        <button class="quick-chip" onclick="quickSend('/vote')">/vote</button>
+                        <button class="quick-chip" onclick="quickSend('/home')">/home</button>
+                        <button class="quick-chip" onclick="quickSend('/clan')">/clan</button>
+                        <button class="quick-chip" onclick="quickSend('/tpa')">/tpa</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -605,12 +633,26 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
                                     var b = botsList[i];
                                     var statusColor = b.status === 'afk_active' ? 'var(--green)' : (b.status === 'in_economy' || b.status === 'logged_in' ? 'var(--yellow)' : (b.status === 'connecting' || b.status === 'reconnecting' ? '#58a6ff' : 'var(--text-muted)'));
                                     var statusLabel = b.status === 'afk_active' ? 'AFK Onlayn 🟢' : (b.status === 'in_economy' ? 'Economy Serverda 🔵' : (b.status === 'logged_in' ? 'Hub (Kirgan) 🟡' : (b.status || "Noma'lum")));
+                                    var hp = b.health != null ? Math.round(b.health) : 20;
+                                    var food = b.food != null ? Math.round(b.food) : 20;
+                                    var hpW = Math.max(0, Math.min(100, (hp / 20) * 100));
+                                    var foodW = Math.max(0, Math.min(100, (food / 20) * 100));
                                     cardsHtml += '<div class="card">' +
                                         '<div class="card-header">Bot #' + (i + 1) + ': ' + escapeHtml(b.username || 'Bot') + ' 🎮</div>' +
                                         '<div class="stat-val" style="color: ' + statusColor + '; font-size: 20px;">' + statusLabel + '</div>' +
                                         '<div class="stat-desc">Server: ' + escapeHtml(b.host || 'allaysmp.pro') + ' (' + escapeHtml(b.server || 'economy') + ')</div>' +
-                                        '<div class="stat-desc">Ish vaqti: ' + escapeHtml(b.uptime_text || '0s') + ' | HP: ' + (b.health != null ? b.health : 20) + ' ❤️</div>' +
-                                        (b.last_message ? '<div class="stat-desc" style="margin-top: 5px; font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="' + escapeHtml(b.last_message) + '">Oxirgi: ' + escapeHtml(b.last_message) + '</div>' : '') +
+                                        '<div class="stat-desc">Ish vaqti: ' + escapeHtml(b.uptime_text || '0s') + '</div>' +
+                                        '<div style="display: flex; gap: 10px; margin-top: 6px; font-size: 11px;">' +
+                                            '<div style="flex: 1;">' +
+                                                '<div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><span>❤️ HP</span><b style="color: #f85149;">' + hp + '/20</b></div>' +
+                                                '<div style="background: #21262d; border-radius: 3px; height: 5px; overflow: hidden;"><div style="background: #f85149; height: 100%; width: ' + hpW + '%;"></div></div>' +
+                                            '</div>' +
+                                            '<div style="flex: 1;">' +
+                                                '<div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><span>🍗 Oziq</span><b style="color: #d29922;">' + food + '/20</b></div>' +
+                                                '<div style="background: #21262d; border-radius: 3px; height: 5px; overflow: hidden;"><div style="background: #d29922; height: 100%; width: ' + foodW + '%;"></div></div>' +
+                                            '</div>' +
+                                        '</div>' +
+                                        (b.last_message ? '<div class="stat-desc" style="margin-top: 6px; font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="' + escapeHtml(b.last_message) + '">Oxirgi: ' + escapeHtml(b.last_message) + '</div>' : '') +
                                     '</div>';
                                 }
                                 container.innerHTML = cardsHtml;
@@ -642,9 +684,11 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
                                     document.getElementById('captcha-img').src = '/api/captcha.png?bot=' + encodeURIComponent(pendingBot.username) + '&t=' + Date.now();
                                     setTimeout(function() { document.getElementById('captcha-input').focus(); }, 150);
                                 }
+                                triggerCaptchaAlert(pendingBot.username);
                             } else {
                                 activeCaptchaBot = null;
                                 banner.style.display = 'none';
+                                clearCaptchaAlert();
                             }
                         }
 
@@ -713,6 +757,47 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
             });
         }
 
+        function quickSend(cmd) {
+            const inp = document.getElementById("chat-msg");
+            if (inp) {
+                inp.value = cmd;
+                sendChatMessage();
+            }
+        }
+
+        let captchaAlarmTimer = null;
+        function triggerCaptchaAlert(botName) {
+            if (!captchaAlarmTimer) {
+                try {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) {
+                        const ctx = new AudioCtx();
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.frequency.value = 880;
+                        gain.gain.value = 0.15;
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start();
+                        osc.stop(ctx.currentTime + 0.25);
+                    }
+                } catch (_) {}
+                captchaAlarmTimer = setInterval(function() {
+                    document.title = (document.title.indexOf('🔴') === -1)
+                        ? '🔴 CAPTCHA TALAB: ' + (botName || 'Bot')
+                        : '⚠️ Captcha Yeching! — Minecraft Bot';
+                }, 1000);
+            }
+        }
+
+        function clearCaptchaAlert() {
+            if (captchaAlarmTimer) {
+                clearInterval(captchaAlarmTimer);
+                captchaAlarmTimer = null;
+                document.title = 'Minecraft 24/7 AFK Bot — Render Dashboard';
+            }
+        }
+
         fetchLogs();
         setInterval(fetchLogs, 3000);
     </script>
@@ -736,23 +821,27 @@ class WebServer {
       const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
       const cleanPath = parsedUrl.pathname.replace(/\/$/, '') || '/';
 
+      const isHead = req.method === 'HEAD';
       const sendJson = (status, data) => {
         const body = Buffer.from(JSON.stringify(data, null, 2), 'utf-8');
         res.writeHead(status, {
           'Content-Type': 'application/json',
           'Content-Length': body.length
         });
+        if (isHead) { res.end(); return; }
         res.end(body);
       };
 
-      // GET so'rovlar
-      if (req.method === 'GET') {
+      // GET va HEAD so'rovlar
+      if (req.method === 'GET' || isHead) {
         if (cleanPath === '/' || cleanPath === '/logs' || cleanPath === '/dashboard') {
           const body = Buffer.from(HTML_DASHBOARD, 'utf-8');
           res.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
-            'Content-Length': body.length
+            'Content-Length': body.length,
+            'Cache-Control': 'no-cache'
           });
+          if (isHead) { res.end(); return; }
           res.end(body);
           return;
         }
