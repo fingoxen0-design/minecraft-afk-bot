@@ -364,7 +364,7 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
     <div id="captcha-alert-banner" style="display: none; background: #2b1117; border: 2px solid #f85149; border-radius: 8px; padding: 14px 18px; margin: 10px 18px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
             <div style="font-weight: 700; color: #ff7b72; font-size: 15px; display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 18px;">🚨</span> ALLAYSMP XARITA CAPTCHA TALAB QILINDI!
+                <span style="font-size: 18px;">🚨</span> ALLAYSMP XARITA CAPTCHA TALAB QILINDI <span id="captcha-bot-label" style="color: #58a6ff;"></span>!
             </div>
             <span style="font-size: 12px; color: #8b949e;">Server 30 soniya kutadi</span>
         </div>
@@ -388,11 +388,13 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
 
         <div id="view-dashboard" class="view">
             <div id="dash-view">
-                <div class="card">
-                    <div class="card-header">Bot Holati 🎮</div>
-                    <div id="stat-bot-status" class="stat-val" style="color: var(--green);">Faol (24/7 AFK)</div>
-                    <div id="stat-bot-server" class="stat-desc">Server: allaysmp.pro (economy)</div>
-                    <div id="stat-bot-uptime" class="stat-desc">Ish vaqti: ...</div>
+                <div id="bots-cards-container" style="display: contents;">
+                    <div class="card">
+                        <div class="card-header">Bot #1: Gotto 🎮</div>
+                        <div id="stat-bot-status" class="stat-val" style="color: var(--green);">Faol (24/7 AFK)</div>
+                        <div id="stat-bot-server" class="stat-desc">Server: allaysmp.pro (economy)</div>
+                        <div id="stat-bot-uptime" class="stat-desc">Ish vaqti: ...</div>
+                    </div>
                 </div>
 
                 <div class="card">
@@ -459,6 +461,11 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
                         Minecraft chatiga xabar yoki server buyrug'i (masalan: <code>/server economy</code>, <code>/spawn</code>) yuborish:
                     </p>
                     <div class="chat-input-row">
+                        <select id="chat-target" class="search-box" style="width: 140px; cursor: pointer;">
+                            <option value="all">Barchasi (All)</option>
+                            <option value="Gotto">Gotto</option>
+                            <option value="fingoxenPro">fingoxenPro</option>
+                        </select>
                         <input type="text" id="chat-msg" class="chat-input" placeholder="Xabar yoki buyruq..." onkeydown="if(event.key==='Enter') sendChatMessage()">
                         <button class="btn-action-primary" onclick="sendChatMessage()">Yuborish</button>
                     </div>
@@ -477,6 +484,7 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
         let autoScroll = true;
         let currentFilter = 'all';
         let searchQuery = '';
+        let activeCaptchaBot = null;
 
         function switchTab(name) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -521,17 +529,17 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
         }
 
         function copyLogs() {
-            const txt = allLogs.map(l => \`[\${l.time}] \${l.message}\`).join("\\n");
-            navigator.clipboard.writeText(txt).then(() => alert("Loglar nusxalandi!"));
+            var txt = allLogs.map(function(l) { return '[' + l.time + '] ' + l.message; }).join('\n');
+            navigator.clipboard.writeText(txt).then(function() { alert("Loglar nusxalandi!"); });
         }
 
         function downloadLogs() {
-            const txt = allLogs.map(l => \`[\${l.time}] \${l.message}\`).join("\\n");
-            const blob = new Blob([txt], { type: "text/plain" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
+            var txt = allLogs.map(function(l) { return '[' + l.time + '] ' + l.message; }).join('\n');
+            var blob = new Blob([txt], { type: "text/plain" });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement("a");
             a.href = url;
-            a.download = \`mc_bot_logs_\${Date.now()}.txt\`;
+            a.download = 'mc_bot_logs_' + Date.now() + '.txt';
             a.click();
             URL.revokeObjectURL(url);
         }
@@ -545,19 +553,19 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
         }
 
         function escapeHtml(str) {
-            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         }
 
         function renderLogs() {
-            const term = document.getElementById("terminal-view");
+            var term = document.getElementById("terminal-view");
             if (!allLogs || allLogs.length === 0) {
                 term.innerHTML = '<div class="log-line log-system">Loglar kutilmoqda...</div>';
                 document.getElementById("footer-count").innerText = "Ko'rsatilmoqda: 0 ta qator";
                 return;
             }
 
-            const filtered = allLogs.filter(l => {
-                const msg = l.message;
+            var filtered = allLogs.filter(function(l) {
+                var msg = l.message;
                 if (currentFilter === 'mineflayer' && !msg.includes('[Mineflayer]')) return false;
                 if (currentFilter === 'keepalive' && !msg.includes('[KeepAlive]')) return false;
                 if (currentFilter === 'error' && !msg.includes('ERROR') && !msg.includes('Xatolik') && !msg.includes('KICK')) return false;
@@ -568,11 +576,11 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
                 return true;
             });
 
-            document.getElementById("footer-count").innerText = \`Ko'rsatilmoqda: \${filtered.length} / Jami: \${allLogs.length} ta qator\`;
+            document.getElementById("footer-count").innerText = "Ko'rsatilmoqda: " + filtered.length + " / Jami: " + allLogs.length + " ta qator";
 
-            term.innerHTML = filtered.map(l => {
-                const cls = colorize(l.message);
-                return \`<div class="log-line"><span class="log-time">\${l.time}</span><span class="\${cls}">\${escapeHtml(l.message)}</span></div>\`;
+            term.innerHTML = filtered.map(function(l) {
+                var cls = colorize(l.message);
+                return '<div class="log-line"><span class="log-time">' + l.time + '</span><span class="' + cls + '">' + escapeHtml(l.message) + '</span></div>';
             }).join("");
 
             if (autoScroll) scrollToBottom();
@@ -580,43 +588,80 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
 
         function fetchLogs() {
             fetch('/api/logs')
-                .then(r => r.json())
-                .then(data => {
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
                     allLogs = data.logs || [];
-                    document.getElementById("footer-uptime").innerText = \`Server ish vaqti: \${data.uptime}s | Holat: \${data.status}\`;
+                    document.getElementById("footer-uptime").innerText = 'Server ish vaqti: ' + data.uptime + 's | Holat: ' + data.status;
                     renderLogs();
 
                     if (data.data) {
-                        const d = data.data;
-                        if (d.bot) {
-                            const b = d.bot;
-                            document.getElementById("stat-bot-status").innerText = b.status === 'afk_active' ? "AFK Onlayn 🟢" : (b.status || "Noma'lum");
-                            document.getElementById("stat-bot-server").innerText = \`Server: \${b.host || 'allaysmp.pro'} (\${b.server || 'economy'}) | Nik: \${b.username || 'Gotto'}\`;
-                            document.getElementById("stat-bot-uptime").innerText = \`Ish vaqti: \${b.uptime_text || '0s'}\`;
+                        var d = data.data;
+                        var botsList = d.bots || (d.bot ? [d.bot] : []);
 
-                            const banner = document.getElementById('captcha-alert-banner');
-                            if (b.captchaPending) {
+                        if (botsList.length > 0) {
+                            var container = document.getElementById("bots-cards-container");
+                            if (container) {
+                                var cardsHtml = '';
+                                for (var i = 0; i < botsList.length; i++) {
+                                    var b = botsList[i];
+                                    var statusColor = b.status === 'afk_active' ? 'var(--green)' : (b.status === 'in_economy' || b.status === 'logged_in' ? 'var(--yellow)' : (b.status === 'connecting' || b.status === 'reconnecting' ? '#58a6ff' : 'var(--text-muted)'));
+                                    var statusLabel = b.status === 'afk_active' ? 'AFK Onlayn 🟢' : (b.status === 'in_economy' ? 'Economy Serverda 🔵' : (b.status === 'logged_in' ? 'Hub (Kirgan) 🟡' : (b.status || "Noma'lum")));
+                                    cardsHtml += '<div class="card">' +
+                                        '<div class="card-header">Bot #' + (i + 1) + ': ' + escapeHtml(b.username || 'Bot') + ' 🎮</div>' +
+                                        '<div class="stat-val" style="color: ' + statusColor + '; font-size: 20px;">' + statusLabel + '</div>' +
+                                        '<div class="stat-desc">Server: ' + escapeHtml(b.host || 'allaysmp.pro') + ' (' + escapeHtml(b.server || 'economy') + ')</div>' +
+                                        '<div class="stat-desc">Ish vaqti: ' + escapeHtml(b.uptime_text || '0s') + ' | HP: ' + (b.health != null ? b.health : 20) + ' ❤️</div>' +
+                                        (b.last_message ? '<div class="stat-desc" style="margin-top: 5px; font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="' + escapeHtml(b.last_message) + '">Oxirgi: ' + escapeHtml(b.last_message) + '</div>' : '') +
+                                    '</div>';
+                                }
+                                container.innerHTML = cardsHtml;
+                            }
+
+                            // Dynamic target dropdown sync
+                            var select = document.getElementById('chat-target');
+                            if (select) {
+                                var existingValues = Array.from(select.options).map(function(o) { return o.value; });
+                                botsList.forEach(function(b) {
+                                    if (!existingValues.includes(b.username)) {
+                                        var opt = document.createElement('option');
+                                        opt.value = b.username;
+                                        opt.innerText = b.username;
+                                        select.appendChild(opt);
+                                    }
+                                });
+                            }
+
+                            // Captcha detection across all bots
+                            var pendingBot = botsList.find(function(b) { return b.captchaPending; });
+                            var banner = document.getElementById('captcha-alert-banner');
+                            if (pendingBot) {
+                                activeCaptchaBot = pendingBot.username;
+                                var label = document.getElementById('captcha-bot-label');
+                                if (label) label.innerText = '(' + pendingBot.username + ')';
                                 if (banner.style.display !== 'block') {
                                     banner.style.display = 'block';
-                                    document.getElementById('captcha-img').src = '/api/captcha.png?t=' + Date.now();
-                                    setTimeout(() => document.getElementById('captcha-input').focus(), 150);
+                                    document.getElementById('captcha-img').src = '/api/captcha.png?bot=' + encodeURIComponent(pendingBot.username) + '&t=' + Date.now();
+                                    setTimeout(function() { document.getElementById('captcha-input').focus(); }, 150);
                                 }
                             } else {
+                                activeCaptchaBot = null;
                                 banner.style.display = 'none';
                             }
                         }
 
                         if (d.vote && d.vote.votes) {
-                            d.vote.votes.forEach(v => {
-                                const elTime = document.getElementById(\`vote-\${v.id}-time\`);
-                                const elLink = document.getElementById(\`vote-\${v.id}-link\`);
+                            d.vote.votes.forEach(function(v) {
+                                var elTime = document.getElementById('vote-' + v.id + '-time');
+                                var elLink = document.getElementById('vote-' + v.id + '-link');
                                 if (elTime) elTime.innerText = v.remaining_text;
                                 if (elLink && v.url) elLink.href = v.url;
                             });
                         }
                     }
                 })
-                .catch(err => console.error("Logs fetch error:", err));
+                .catch(function(err) { console.error("Logs fetch error:", err); });
+        }
+        }
         }
 
         function submitCaptchaCode() {
@@ -628,7 +673,7 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
             fetch('/api/captcha/solve', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: code })
+                body: JSON.stringify({ code: code, bot: activeCaptchaBot || null })
             }).then(r => r.json()).then(d => {
                 fb.innerText = d.message || 'Yuborildi!';
                 input.value = '';
@@ -659,10 +704,12 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
             const inp = document.getElementById("chat-msg");
             const text = inp.value.trim();
             if (!text) return;
+            const targetSelect = document.getElementById("chat-target");
+            const target = targetSelect ? targetSelect.value : 'all';
             fetch('/api/bot/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: text })
+                body: JSON.stringify({ text: text, bot: target })
             }).then(r => r.json()).then(res => {
                 inp.value = '';
                 fetchLogs();
@@ -714,7 +761,17 @@ class WebServer {
         }
 
         if (cleanPath === '/api/captcha.png' || cleanPath === '/api/captcha/image') {
-          const png = (this.supervisor && this.supervisor.lastCaptchaPng) ? this.supervisor.lastCaptchaPng : null;
+          const botParam = parsedUrl.searchParams.get('bot');
+          let png = null;
+          if (this.supervisor) {
+            if (botParam && this.supervisor.bots) {
+              const targetBot = this.supervisor.bots.find(b => b.username.toLowerCase() === botParam.toLowerCase());
+              if (targetBot && targetBot.lastCaptchaPng) png = targetBot.lastCaptchaPng;
+            }
+            if (!png && this.supervisor.lastCaptchaPng) {
+              png = this.supervisor.lastCaptchaPng;
+            }
+          }
           if (png) {
             res.writeHead(200, {
               'Content-Type': 'image/png',

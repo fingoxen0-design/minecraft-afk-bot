@@ -255,3 +255,5 @@ class VoteTracker {
 }
 
 module.exports = VoteTracker;
+VoteTracker.VoteTracker = VoteTracker;
+
