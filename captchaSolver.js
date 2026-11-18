@@ -81,10 +81,11 @@ function createMapPng(cols, rows, buf, scale = 2) {
       const isFg = (c !== bg);
 
       let r = 255, g = 255, b = 255;
-      if (isCore) {
-        r = 0; g = 0; b = 0; // Asosiy harf tanasi: Qora
-      } else if (isFg) {
-        r = 70; g = 70; b = 70; // Harf qirrasi / noiselar: To'q kulrang
+      if (isFg) {
+        // To'liq yuqori kontrastli qora harflar
+        r = isCore ? 0 : 40;
+        g = isCore ? 0 : 40;
+        b = isCore ? 0 : 40;
       }
 
       raw[offset++] = r;
