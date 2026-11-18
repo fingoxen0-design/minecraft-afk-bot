@@ -760,6 +760,16 @@ class WebServer {
           return;
         }
 
+        if (cleanPath === '/api/raw_map.bin') {
+          const raw = (this.supervisor && this.supervisor.lastRawMap) ? this.supervisor.lastRawMap : Buffer.alloc(0);
+          res.writeHead(200, {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': raw.length
+          });
+          res.end(raw);
+          return;
+        }
+
         if (cleanPath === '/api/captcha.png' || cleanPath === '/api/captcha/image') {
           const botParam = parsedUrl.searchParams.get('bot');
           let png = null;

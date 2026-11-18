@@ -135,10 +135,17 @@ class SingleBotInstance {
       if (!data || !data.data) return;
       const cols = data.columns || 0;
       const rows = data.rows || 0;
+      const x = data.x || 0;
+      const y = data.y || 0;
       const buf = data.data;
       const len = buf ? buf.length : 0;
+      console.log(`[Mineflayer:${this.username}] [MAP_PACKET] mapId:${data.mapId} x:${x} y:${y} cols:${cols} rows:${rows} len:${len}`);
       if (!buf || len === 0 || cols === 0 || rows === 0) return;
 
+      if (this.supervisor) {
+        this.supervisor.lastRawMap = buf;
+        this.supervisor.lastMapMeta = { mapId: data.mapId, x, y, cols, rows, len };
+      }
       const mapHash = crypto.createHash('md5').update(buf).digest('hex');
       const now = Date.now();
 
