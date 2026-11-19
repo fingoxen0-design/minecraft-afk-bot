@@ -20,8 +20,8 @@ class VoteTracker {
       },
       "2": {
         id: 2,
-        name: "Vote Server #2",
-        url: config.VOTE_2_URL || "",
+        name: "MinecraftServers.org (#2)",
+        url: config.VOTE_2_URL || "https://minecraftservers.org/vote/684238",
         cooldown_hours: 24.0,
         last_vote_timestamp: 0,
         next_vote_timestamp: 0,

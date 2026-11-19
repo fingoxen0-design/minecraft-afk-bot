@@ -44,7 +44,7 @@ module.exports = {
 
   // 4 ta Ovoz Berish (Vote) Sozlamalari
   VOTE_1_URL: process.env.VOTE_1_URL || 'https://minecraft-mp.com/server/350645/vote/',
-  VOTE_2_URL: process.env.VOTE_2_URL || '',
+  VOTE_2_URL: process.env.VOTE_2_URL || 'https://minecraftservers.org/vote/684238',
   VOTE_3_URL: process.env.VOTE_3_URL || '',
   VOTE_4_URL: process.env.VOTE_4_URL || '',
   COOLDOWN_HOURS: parseFloat(process.env.COOLDOWN_HOURS || '15.0'),
