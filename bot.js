@@ -51,6 +51,37 @@ function extractCleanText(obj) {
   return '';
 }
 
+// Buyruq va chatlarni tozalash, Telegram /cmd, /say qoldiqlarini to'g'rilash
+function normalizeCommand(raw) {
+  let str = String(raw || '').trim();
+  if (!str) return '';
+
+  // 1. Eski Telegram bot prefikslarini tozalash (/cmd va /say)
+  if (/^\/cmd\s+/i.test(str)) {
+    str = str.replace(/^\/cmd\s+/i, '').trim();
+  } else if (/^\/cmd$/i.test(str)) {
+    return '';
+  }
+
+  if (/^\/say\s+/i.test(str)) {
+    str = str.replace(/^\/say\s+/i, '').trim();
+  }
+
+  // 2. '/' siz kiritilgan server buyruqlarini avtomatik '/' bilan to'ldirish
+  const knownCommands = [
+    'tpaccept', 'tpa', 'tpahere', 'home', 'spawn', 'afk', 'warp',
+    'balance', 'bal', 'money', 'pay', 'vote', 'server', 'login',
+    'register', 'shards', 'shard', 'clan', 'help', 'msg', 'tell', 'w', 'r'
+  ];
+
+  const firstWord = str.split(/\s+/)[0].toLowerCase();
+  if (knownCommands.includes(firstWord) && !str.startsWith('/')) {
+    str = '/' + str;
+  }
+
+  return str;
+}
+
 class SingleBotInstance {
   constructor(account, supervisor) {
     this.account = account;
@@ -82,6 +113,7 @@ class SingleBotInstance {
     this.lastSolvedMapHash = null;
     this.lastSolvedMapTime = 0;
     this.lastMapProcessTime = 0;
+    this.targetLocation = 'afk'; // 'afk', 'home', 'spawn', 'warp'
   }
 
   getSummary() {
@@ -105,6 +137,7 @@ class SingleBotInstance {
       host: config.MC_HOST,
       subserver: config.MC_SUBSERVER,
       manual_stopped: this.manualStopped,
+      target_location: this.targetLocation,
       captchaPending: this.isCaptchaPending,
       hasCaptchaPng: !!this.lastCaptchaPng,
       lastCaptchaTime: this.lastCaptchaTime,
@@ -145,10 +178,27 @@ class SingleBotInstance {
     }
   }
 
-  safeChat(message) {
+  safeChat(rawMessage) {
     if (!this.bot || typeof this.bot.chat !== 'function') {
       return false;
     }
+    const message = normalizeCommand(rawMessage);
+    if (!message) return false;
+
+    const lower = message.toLowerCase();
+    if (lower.startsWith('/home') || lower.startsWith('/spawn') || lower.startsWith('/warp')) {
+      this.targetLocation = lower.startsWith('/home') ? 'home' : (lower.startsWith('/spawn') ? 'spawn' : 'warp');
+      this.isAfk = false;
+      this.status = `at_${this.targetLocation}`;
+      if (this.antiKickInterval) {
+        clearInterval(this.antiKickInterval);
+        this.antiKickInterval = null;
+      }
+      console.log(`[Mineflayer:${this.username}] Maxsus manzil rejimi: ${this.targetLocation} (AFK majburlash to'xtatildi)`);
+    } else if (lower.startsWith('/afk')) {
+      this.targetLocation = 'afk';
+    }
+
     try {
       this.bot.chat(String(message));
       console.log(`[Mineflayer:${this.username}] [CHAT_OUT] ${message}`);
@@ -182,6 +232,17 @@ class SingleBotInstance {
     if (this.watchdogInterval) clearInterval(this.watchdogInterval);
     this.watchdogInterval = setInterval(() => {
       if (!this.bot || this.manualStopped || this.isCaptchaPending) return;
+
+      // Agar bot 'home' rejimida bo'lsa, uni AFK ga majburlamaymiz!
+      if (this.targetLocation === 'home') {
+        if (this.currentServer === config.MC_SUBSERVER && this.status !== 'at_home') {
+          console.log(`[Watchdog:${this.username}] Bot home rejimida, /home 1 qayta tekshirilmoqda...`);
+          this.safeChat('/home 1');
+          this.status = 'at_home';
+        }
+        return;
+      }
+
       // Agar bot Lobbiyda qolib ketgan bo'lsa yoki afk_active bo'lmasa, qayta tiklash
       if (this.status !== 'afk_active' || !this.isAfk) {
         console.log(`[Watchdog:${this.username}] Bot AFK rejimida emas (${this.status}, server: ${this.currentServer}). /server orqali tekshirilmoqda...`);
@@ -311,9 +372,12 @@ class SingleBotInstance {
     bot.on('respawn', () => {
       console.log(`[Mineflayer:${this.username}] Server yoki dunyo almashdi (respawn).`);
       this.currentServer = config.MC_SUBSERVER;
-      this.status = 'in_economy';
       this.safeTimeout(() => {
-        if (!this.isAfk) {
+        if (this.targetLocation === 'home') {
+          console.log(`[Mineflayer:${this.username}] Bot home rejimida, AFK ga o'tilmaydi.`);
+          this.status = 'at_home';
+          this.isAfk = false;
+        } else if (!this.isAfk) {
           console.log(`[Mineflayer:${this.username}] /afk rejimiga o'tilmoqda...`);
           this.safeChat('/afk');
           this.isAfk = true;
@@ -390,6 +454,29 @@ class SingleBotInstance {
         handleOwnerCommand('Fingoxenpro', text);
       }
 
+      // Home ga yetib kelganini aniqlash
+      if (lower.includes('teleported to your home') || lower.includes('homes • teleported')) {
+        this.status = 'at_home';
+        this.isAfk = false;
+        this.targetLocation = 'home';
+        console.log(`[Mineflayer:${this.username}] Bot muvaffaqiyatli /home 1 ga keldi! Fingoxenpro chaqirilmoqda...`);
+        this.safeTimeout(() => {
+          this.safeChat('/tpahere Fingoxenpro');
+          this.safeChat('/msg Fingoxenpro Men /home 1 daman, /tpa Gotto deb yozing!');
+        }, 1200);
+      }
+
+      // Fingoxenpro serverga kirganida chaqirish
+      if (lower.includes('fingoxenpro') && (lower.includes('joined') || lower.includes('has joined'))) {
+        console.log(`[Mineflayer:${this.username}] Fingoxenpro serverga kirdi!`);
+        if (this.targetLocation === 'home' || this.status === 'at_home') {
+          this.safeTimeout(() => {
+            this.safeChat('/tpahere Fingoxenpro');
+            this.safeChat('/msg Fingoxenpro Men /home 1 daman, /tpa Gotto deb yozing!');
+          }, 2000);
+        }
+      }
+
       // Captcha yechilganini aniqlash
       if (lower.includes('solved') || lower.includes('welcome') || lower.includes('sending you to') || lower.includes('successfully') || lower.includes('logged in')) {
         this.isCaptchaPending = false;
@@ -412,12 +499,15 @@ class SingleBotInstance {
         console.log(`[Mineflayer:${this.username}] ${config.MC_SUBSERVER} serveriga muvaffaqiyatli o'tildi!`);
 
         this.safeTimeout(() => {
-          if (!this.isAfk) {
+          if (!this.isAfk && this.targetLocation === 'afk') {
             console.log(`[Mineflayer:${this.username}] /afk rejimiga o'tilmoqda...`);
             this.safeChat('/afk');
             this.isAfk = true;
             this.status = 'afk_active';
             this.safeStartAfkMovement();
+          } else if (this.targetLocation === 'home') {
+            console.log(`[Mineflayer:${this.username}] Home 1 ga o'tilmoqda...`);
+            this.safeChat('/home 1');
           }
         }, 3000);
       }
@@ -755,5 +845,6 @@ if (require.main === module) {
 }
 
 Minecraft247Bot.extractCleanText = extractCleanText;
+Minecraft247Bot.normalizeCommand = normalizeCommand;
 
 module.exports = Minecraft247Bot;

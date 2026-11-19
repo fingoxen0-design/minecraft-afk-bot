@@ -56,3 +56,30 @@ test('Minecraft247Bot - clean text extraction from NBT/Compound', () => {
   const formattedStr = '§aWELCOME§r to §6AllaySMP!';
   assert.strictEqual(extractCleanText(formattedStr), 'WELCOME to AllaySMP!');
 });
+
+test('Minecraft247Bot - normalizeCommand cleans legacy telegram /cmd, /say and adds leading slash', () => {
+  const normalize = Minecraft247Bot.normalizeCommand;
+  assert.ok(typeof normalize === 'function');
+
+  // Telegram /cmd leftovers
+  assert.strictEqual(normalize('/cmd tpaccept'), '/tpaccept');
+  assert.strictEqual(normalize('/cmd home 1'), '/home 1');
+  assert.strictEqual(normalize('/CMD /home 1'), '/home 1');
+  assert.strictEqual(normalize('/cmd'), '');
+
+  // Telegram /say leftovers
+  assert.strictEqual(normalize('/say salom do\'stlar'), 'salom do\'stlar');
+
+  // Known commands missing leading slash
+  assert.strictEqual(normalize('home 1'), '/home 1');
+  assert.strictEqual(normalize('tpaccept'), '/tpaccept');
+  assert.strictEqual(normalize('afk'), '/afk');
+  assert.strictEqual(normalize('tpa Fingoxenpro'), '/tpa Fingoxenpro');
+  assert.strictEqual(normalize('spawn'), '/spawn');
+  assert.strictEqual(normalize('balance'), '/balance');
+
+  // Normal chat or already slashed commands
+  assert.strictEqual(normalize('/home 1'), '/home 1');
+  assert.strictEqual(normalize('/tpahere Fingoxenpro'), '/tpahere Fingoxenpro');
+  assert.strictEqual(normalize(''), '');
+});

@@ -495,16 +495,15 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
                     </div>
                     <div class="quick-chips" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center;">
                         <span style="font-size: 11px; color: var(--text-muted);">⚡️ Tezkor:</span>
-                        <button class="quick-chip" onclick="quickSend('/tpaccept Fingoxenpro')">/tpaccept Fingoxenpro</button>
-                        <button class="quick-chip" onclick="quickSend('/tpaccept')">/tpaccept</button>
-                        <button class="quick-chip" onclick="quickSend('/server economy')">/server economy</button>
-                        <button class="quick-chip" onclick="quickSend('/afk')">/afk</button>
-                        <button class="quick-chip" onclick="quickSend('/spawn')">/spawn</button>
-                        <button class="quick-chip" onclick="quickSend('/balance')">/balance</button>
-                        <button class="quick-chip" onclick="quickSend('/vote')">/vote</button>
-                        <button class="quick-chip" onclick="quickSend('/home')">/home</button>
-                        <button class="quick-chip" onclick="quickSend('/clan')">/clan</button>
-                        <button class="quick-chip" onclick="quickSend('/tpa')">/tpa</button>
+                        <button class="quick-chip" onclick="quickSend('/home 1')">🏠 /home 1</button>
+                        <button class="quick-chip" onclick="quickSend('/tpaccept Fingoxenpro')">🤝 /tpaccept Fingoxenpro</button>
+                        <button class="quick-chip" onclick="quickSend('/tpaccept')">✅ /tpaccept</button>
+                        <button class="quick-chip" onclick="quickSend('/tpahere Fingoxenpro')">📍 /tpahere Fingoxenpro</button>
+                        <button class="quick-chip" onclick="quickSend('/afk')">⚡️ /afk</button>
+                        <button class="quick-chip" onclick="quickSend('/server economy')">🔄 /server economy</button>
+                        <button class="quick-chip" onclick="quickSend('/spawn')">🗺 /spawn</button>
+                        <button class="quick-chip" onclick="quickSend('/balance')">💰 /balance</button>
+                        <button class="quick-chip" onclick="quickSend('/vote')">🗳 /vote</button>
                     </div>
                 </div>
             </div>
