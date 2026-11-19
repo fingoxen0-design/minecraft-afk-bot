@@ -31,13 +31,20 @@ class LogBuffer {
     });
   }
 
-  getLogs() {
+  getLogs(since = 0, limit = 0) {
     const now = Date.now() / 1000;
     const cutoff = now - this.maxSeconds;
     while (this.entries.length > 0 && this.entries[0].timestamp < cutoff) {
       this.entries.shift();
     }
-    return [...this.entries];
+    let list = this.entries;
+    if (since > 0) {
+      list = list.filter(e => e.timestamp > since);
+    }
+    if (limit > 0 && list.length > limit) {
+      list = list.slice(-limit);
+    }
+    return [...list];
   }
 }
 
@@ -352,6 +359,7 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
         <div class="brand">
             <div class="title">🎮 Minecraft 24/7 AFK Bot (Node.js)</div>
             <div class="live-badge"><span class="live-dot"></span> RENDER ONLAYN</div>
+            <div class="live-badge" style="color: #58a6ff; border-color: rgba(88,166,255,0.4);"><span class="live-dot" style="background: #58a6ff;"></span> PING: <span id="header-ping">-- ms</span></div>
         </div>
         <div class="tabs">
             <button class="tab-btn active" onclick="switchTab('terminal')">📜 Terminal (Loglar)</button>
@@ -487,6 +495,8 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
                     </div>
                     <div class="quick-chips" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center;">
                         <span style="font-size: 11px; color: var(--text-muted);">⚡️ Tezkor:</span>
+                        <button class="quick-chip" onclick="quickSend('/tpaccept Fingoxenpro')">/tpaccept Fingoxenpro</button>
+                        <button class="quick-chip" onclick="quickSend('/tpaccept')">/tpaccept</button>
                         <button class="quick-chip" onclick="quickSend('/server economy')">/server economy</button>
                         <button class="quick-chip" onclick="quickSend('/afk')">/afk</button>
                         <button class="quick-chip" onclick="quickSend('/spawn')">/spawn</button>
@@ -889,12 +899,15 @@ class WebServer {
 
         if (cleanPath === '/api/logs') {
           const uptime = Math.floor((Date.now() - this.startTime) / 1000);
-          const logs = globalLogBuffer.getLogs();
+          const since = parseFloat(parsedUrl.searchParams.get('since') || '0');
+          const limit = parseInt(parsedUrl.searchParams.get('limit') || '0', 10);
+          const logs = globalLogBuffer.getLogs(since, limit);
           const data = this.getStatusCallback ? this.getStatusCallback() : {};
           sendJson(200, {
             status: 'healthy',
             uptime: uptime,
             count: logs.length,
+            total_count: globalLogBuffer.entries.length,
             window_hours: 2.0,
             data: data,
             logs: logs

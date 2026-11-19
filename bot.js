@@ -108,6 +108,7 @@ class SingleBotInstance {
       captchaPending: this.isCaptchaPending,
       hasCaptchaPng: !!this.lastCaptchaPng,
       lastCaptchaTime: this.lastCaptchaTime,
+      ping: (this.bot && this.bot.player && typeof this.bot.player.ping === 'number') ? this.bot.player.ping : 0,
       position: this.bot && this.bot.entity ? {
         x: Math.round(this.bot.entity.position.x),
         y: Math.round(this.bot.entity.position.y),
@@ -182,14 +183,11 @@ class SingleBotInstance {
     this.watchdogInterval = setInterval(() => {
       if (!this.bot || this.manualStopped || this.isCaptchaPending) return;
       // Agar bot Lobbiyda qolib ketgan bo'lsa yoki afk_active bo'lmasa, qayta tiklash
-      if (this.status !== 'afk_active' || !this.isAfk || this.currentServer !== config.MC_SUBSERVER) {
-        console.log(`[Watchdog:${this.username}] Bot AFK rejimida emas (${this.status}, server: ${this.currentServer}). Subserver va AFK qayta tiklanmoqda...`);
-        this.safeChat(`/server ${config.MC_SUBSERVER}`);
-        this.safeTimeout(() => {
-          this.safeChat('/afk');
-        }, 3500);
+      if (this.status !== 'afk_active' || !this.isAfk) {
+        console.log(`[Watchdog:${this.username}] Bot AFK rejimida emas (${this.status}, server: ${this.currentServer}). /server orqali tekshirilmoqda...`);
+        this.safeChat('/server');
       }
-    }, 40000); // Har 40 soniyada holatni tekshiradi
+    }, 35000); // Har 35 soniyada holatni tekshiradi
   }
 
   handleMapCaptcha(data) {
@@ -255,6 +253,9 @@ class SingleBotInstance {
       this.cleanup();
     }
 
+    this.currentServer = 'hub';
+    this.isAfk = false;
+    this.hasLoggedIn = false;
     this.status = 'connecting';
     this.startedAt = Date.now();
     console.log(`[Mineflayer:${this.username}] Minecraft serverga ulanish: ${config.MC_HOST}:${config.MC_PORT}`);
@@ -295,10 +296,14 @@ class SingleBotInstance {
         }
 
         this.safeTimeout(() => {
-          if (config.MC_SUBSERVER && this.currentServer !== config.MC_SUBSERVER) {
-            console.log(`[Mineflayer:${this.username}] /server ${config.MC_SUBSERVER} ga o'tish buyrug'i yuborilmoqda...`);
-            this.safeChat(`/server ${config.MC_SUBSERVER}`);
-          }
+          console.log(`[Mineflayer:${this.username}] Server holatini aniqlash (/server)...`);
+          this.safeChat('/server');
+          this.safeTimeout(() => {
+            if (config.MC_SUBSERVER && this.currentServer !== config.MC_SUBSERVER) {
+              console.log(`[Mineflayer:${this.username}] /server ${config.MC_SUBSERVER} ga o'tish buyrug'i yuborilmoqda...`);
+              this.safeChat(`/server ${config.MC_SUBSERVER}`);
+            }
+          }, 2500);
         }, 3000);
       }, 2000);
     });
@@ -368,10 +373,12 @@ class SingleBotInstance {
         const isOwner = (config.MC_OWNERS || []).some(o => lower.includes(o)) || lower.includes('fingoxen');
         if (isOwner) {
           console.log(`[Mineflayer:${this.username}] [AUTO-TPA] Egadan TPA so'rovi aniqlandi! /tpaccept qilinmoqda...`);
+          const tpMatch = clean.match(/\/tpaccept\s+([a-zA-Z0-9_]+)/i);
+          const targetPlayer = tpMatch ? tpMatch[1] : 'Fingoxenpro';
           this.safeTimeout(() => {
-            this.safeChat('/tpaccept Fingoxenpro');
+            this.safeChat(`/tpaccept ${targetPlayer}`);
             this.safeChat('/tpaccept');
-          }, 800);
+          }, 500);
         }
       }
 
@@ -413,6 +420,16 @@ class SingleBotInstance {
             this.safeStartAfkMovement();
           }
         }, 3000);
+      }
+
+      // Agar lobbiyda ekanligi aniqlansa
+      if (lower.includes('connected to lobby') || lower.includes('connected to hub') || lower.includes('joined lobby')) {
+        this.currentServer = 'hub';
+        this.isAfk = false;
+        console.log(`[Mineflayer:${this.username}] Lobbiyda ekanligi aniqlandi. ${config.MC_SUBSERVER} ga o'tish yuborilmoqda...`);
+        this.safeTimeout(() => {
+          this.safeChat(`/server ${config.MC_SUBSERVER}`);
+        }, 1500);
       }
 
       // Ro'yxatdan o'tish so'ralsa
@@ -505,6 +522,7 @@ class SingleBotInstance {
       } catch (_) {}
       this.bot = null;
     }
+    this.currentServer = 'hub';
     this.isAfk = false;
     this.hasLoggedIn = false;
     this.isCaptchaPending = false;
