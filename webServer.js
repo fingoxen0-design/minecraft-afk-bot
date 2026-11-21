@@ -359,6 +359,7 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
         <div class="brand">
             <div class="title">🎮 Minecraft 24/7 AFK Bot (Node.js)</div>
             <div class="live-badge"><span class="live-dot"></span> RENDER ONLAYN</div>
+            <div class="live-badge" style="color: #ffd700; border-color: rgba(255,215,0,0.5);"><span class="live-dot" style="background: #ffd700;"></span> 💎 SHARDS: <span id="header-shards">★6.1K</span></div>
             <div class="live-badge" style="color: #58a6ff; border-color: rgba(88,166,255,0.4);"><span class="live-dot" style="background: #58a6ff;"></span> PING: <span id="header-ping">-- ms</span></div>
         </div>
         <div class="tabs">
@@ -422,6 +423,12 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
                     </div>
                 </div>
 
+                <div class="card" style="border-color: rgba(255, 215, 0, 0.4); background: linear-gradient(145deg, #161b22, #1c2128);">
+                    <div class="card-header" style="color: #ffd700; font-weight: bold;">💎 AFK Shardlar (Economy)</div>
+                    <div id="stat-shards-total" class="stat-val" style="color: #ffd700; font-size: 26px;">★6.1K</div>
+                    <div id="stat-shards-sub" class="stat-desc">+10 Shard / 5 daqiqa (AFK Hovuzi)</div>
+                </div>
+
                 <div class="card">
                     <div class="card-header">Render Anti-Sleep ⚡️</div>
                     <div class="stat-val" style="color: var(--yellow);">Uyg'oq (10 daqiqa)</div>
@@ -474,9 +481,10 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
                     <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
                         Bot avtomatik ishlaydi va uzilsa qayta ulanadi. Qo'lda to'xtatish yoki qayta ishga tushirish:
                     </p>
-                    <div style="display: flex; gap: 10px;">
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                         <button class="btn-action-primary" onclick="botAction('start')">▶️ Botni Yoqish (Start)</button>
                         <button class="btn-action-danger" onclick="botAction('stop')">⏹ Botni To'xtatish (Stop)</button>
+                        <button class="btn-action-primary" style="background: linear-gradient(135deg, #1f6feb, #238636); border-color: #2ea043;" onclick="botAction('recover_afk')">🔄 Avto-Tiklash (Lobby ➜ AFK)</button>
                     </div>
                 </div>
 
@@ -495,11 +503,11 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
                     </div>
                     <div class="quick-chips" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center;">
                         <span style="font-size: 11px; color: var(--text-muted);">⚡️ Tezkor:</span>
-                        <button class="quick-chip" onclick="quickSend('/home 1')">🏠 /home 1</button>
+                        <button class="quick-chip" onclick="quickSend('/shards')">💎 /shards</button>
+                        <button class="quick-chip" onclick="quickSend('/afk')">⚡️ /afk</button>
                         <button class="quick-chip" onclick="quickSend('/tpaccept Fingoxenpro')">🤝 /tpaccept Fingoxenpro</button>
                         <button class="quick-chip" onclick="quickSend('/tpaccept')">✅ /tpaccept</button>
-                        <button class="quick-chip" onclick="quickSend('/tpahere Fingoxenpro')">📍 /tpahere Fingoxenpro</button>
-                        <button class="quick-chip" onclick="quickSend('/afk')">⚡️ /afk</button>
+                        <button class="quick-chip" onclick="quickSend('/home 1')">🏠 /home 1</button>
                         <button class="quick-chip" onclick="quickSend('/server economy')">🔄 /server economy</button>
                         <button class="quick-chip" onclick="quickSend('/spawn')">🗺 /spawn</button>
                         <button class="quick-chip" onclick="quickSend('/balance')">💰 /balance</button>
@@ -698,6 +706,20 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
                                 activeCaptchaBot = null;
                                 banner.style.display = 'none';
                                 clearCaptchaAlert();
+                            }
+                        }
+
+                        if (d.shards) {
+                            var formatted = d.shards.formatted_total || (d.shards.total != null ? d.shards.total : '6.1K');
+                            var hShard = document.getElementById('header-shards');
+                            if (hShard) hShard.innerText = '★' + formatted;
+
+                            var totalEl = document.getElementById('stat-shards-total');
+                            if (totalEl) totalEl.innerText = '★' + formatted;
+
+                            var subEl = document.getElementById('stat-shards-sub');
+                            if (subEl) {
+                                subEl.innerText = '+' + (d.shards.session || 0) + ' Shard (sessiya) | +10 / 5 daqiqa';
                             }
                         }
 

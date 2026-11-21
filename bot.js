@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const mineflayer = require('mineflayer');
 const config = require('./config');
 const VoteTracker = require('./voteTracker');
+const ShardTracker = require('./shardTracker');
 const { WebServer, globalLogBuffer } = require('./webServer');
 const { createMapPng, solveMapWithOcr } = require('./captchaSolver');
 
@@ -90,8 +91,8 @@ class SingleBotInstance {
     this.supervisor = supervisor;
 
     this.bot = null;
-    this.status = 'stopped'; // stopped, connecting, logged_in, in_economy, afk_active, reconnecting, kicked
-    this.currentServer = 'hub';
+    this.status = 'stopped'; // stopped, connecting, logged_in, in_queue, in_economy, afk_active, reconnecting, kicked
+    this.currentServer = 'lobby'; // Har doim 'lobby' dan boshlaydi
     this.isAfk = false;
     this.health = 20;
     this.food = 20;
@@ -101,7 +102,15 @@ class SingleBotInstance {
     this.reconnectTimer = null;
     this.antiKickInterval = null;
     this.watchdogInterval = null;
+    this.shardCheckInterval = null;
+    this.lastShardCheck = 0;
     this.pendingTimers = [];
+
+    // Velocity Proxy Navbat (Queue) Boshqaruvi (60-80s)
+    this.isQueueWaiting = false;
+    this.queueStartedAt = null;
+    this.queueDurationMs = 80000; // 80 soniya
+    this.queueTimer = null;
 
     // Captcha & Safety State
     this.hasLoggedIn = false;
@@ -124,11 +133,17 @@ class SingleBotInstance {
     const mins = Math.floor((uptimeSec % 3600) / 60);
     const secs = uptimeSec % 60;
 
+    const queueRemSec = (this.isQueueWaiting && this.queueStartedAt)
+      ? Math.max(0, Math.ceil((this.queueDurationMs - (Date.now() - this.queueStartedAt)) / 1000))
+      : 0;
+
     return {
       username: this.username,
       status: this.status,
       is_afk: this.isAfk,
       server: this.currentServer,
+      is_queue_waiting: this.isQueueWaiting,
+      queue_remaining_seconds: queueRemSec,
       health: this.health,
       food: this.food,
       uptime_seconds: uptimeSec,
@@ -176,14 +191,30 @@ class SingleBotInstance {
       clearInterval(this.watchdogInterval);
       this.watchdogInterval = null;
     }
+    if (this.queueTimer) {
+      clearTimeout(this.queueTimer);
+      this.queueTimer = null;
+    }
+    if (this.shardCheckInterval) {
+      clearInterval(this.shardCheckInterval);
+      this.shardCheckInterval = null;
+    }
   }
 
-  safeChat(rawMessage) {
+  safeChat(rawMessage, force = false) {
     if (!this.bot || typeof this.bot.chat !== 'function') {
       return false;
     }
     const message = normalizeCommand(rawMessage);
     if (!message) return false;
+
+    // 1. Agar Velocity navbat ketayotgan bo'lsa va bu majburiy (force) bo'lmasa:
+    // Velocity Proxy "An internal error occurred in your connection" xatosi bilan kick qilmasligi uchun buyruq to'xtatiladi!
+    if (this.isQueueWaiting && !force) {
+      const remaining = Math.max(0, Math.ceil((this.queueDurationMs - (Date.now() - this.queueStartedAt)) / 1000));
+      console.log(`[Mineflayer:${this.username}] ⚠️ Navbat ketyapti (${remaining}s qoldi). Velocity kick oldini olish uchun xabar bloklandi: "${message}"`);
+      return false;
+    }
 
     const lower = message.toLowerCase();
     if (lower.startsWith('/home') || lower.startsWith('/spawn') || lower.startsWith('/warp')) {
@@ -207,6 +238,96 @@ class SingleBotInstance {
       console.error(`[Mineflayer:${this.username}] Chat yuborishda xato: ${err.message}`);
       return false;
     }
+  }
+
+  startQueueWait(durationMs = 80000) {
+    if (this.queueTimer) clearTimeout(this.queueTimer);
+    this.isQueueWaiting = true;
+    this.queueStartedAt = Date.now();
+    this.queueDurationMs = durationMs;
+    this.status = 'in_queue';
+    this.currentServer = 'lobby';
+    console.log(`[Mineflayer:${this.username}] ⏳ Velocity navbatga qo'yildi (${Math.round(durationMs / 1000)}s kutish). Kick bo'lmasligi uchun xabar yuborish to'xtatildi.`);
+
+    this.queueTimer = setTimeout(() => {
+      this.isQueueWaiting = false;
+      this.queueTimer = null;
+      console.log(`[Mineflayer:${this.username}] ⏰ 80 soniyalik navbat vaqti tugadi. Economy va AFK holatiga o'tilmoqda...`);
+
+      this.currentServer = config.MC_SUBSERVER;
+      if (this.targetLocation === 'afk' && !this.isAfk) {
+        console.log(`[Mineflayer:${this.username}] /afk buyrug'i yuborilmoqda...`);
+        this.safeChat('/afk', true);
+        this.isAfk = true;
+        this.status = 'afk_active';
+        this.safeStartAfkMovement();
+        this.startShardChecker();
+      } else if (this.targetLocation === 'home') {
+        this.safeChat('/home 1', true);
+      }
+    }, durationMs);
+  }
+
+  recoverToLobby() {
+    console.log(`[Mineflayer:${this.username}] 🔄 Adashgan holatdan (Practice/KitPvP) Lobby ga qayta ulanish boshlandi...`);
+    this.cleanup();
+    this.scheduleReconnect(3000);
+  }
+
+  recoverAfk() {
+    if (this.manualStopped) {
+      this.manualStopped = false;
+    }
+    if (!this.bot || this.status === 'stopped' || this.status === 'disconnected' || this.status === 'kicked') {
+      this.start();
+      return { success: true, message: 'Bot ishga tushirildi va Lobby -> 80s Queue -> AFK zanjiri boshlandi' };
+    }
+
+    // 1. Agar bot allaqachon Economy'da va AFK faol bo'lsa
+    if (this.currentServer === config.MC_SUBSERVER && this.isAfk && this.status === 'afk_active') {
+      this.safeChat('/afk', true);
+      return { success: true, message: 'Bot allaqachon Economy AFK hovuzida, /afk qayta tasdiqlandi' };
+    }
+
+    // 2. Agar navbatda turgan bo'lsa
+    if (this.isQueueWaiting) {
+      const rem = Math.max(0, Math.ceil((this.queueDurationMs - (Date.now() - this.queueStartedAt)) / 1000));
+      return { success: true, message: `Bot hozir Velocity navbatida turibdi (${rem}s qoldi). Iltimos kuting.` };
+    }
+
+    // 3. Agar bot Lobby'da bo'lsa
+    if (this.currentServer === 'lobby' || this.currentServer === 'hub') {
+      console.log(`[Mineflayer:${this.username}] [RECOVER] Lobby dan ${config.MC_SUBSERVER} navbatiga kirish boshlandi...`);
+      this.safeChat(`/server ${config.MC_SUBSERVER}`, true);
+      this.startQueueWait(80000);
+      return { success: true, message: `Lobby dan ${config.MC_SUBSERVER} ga o'tish yuborildi. 80 soniya navbat kutilmoqda.` };
+    }
+
+    // 4. Agar boshqa serverda bo'lsa
+    console.log(`[Mineflayer:${this.username}] [RECOVER] Server: ${this.currentServer}. Lobby orqali qayta tiklanmoqda...`);
+    this.recoverToLobby();
+    return { success: true, message: 'Kutilmagan serverdan Lobby ga qayta ulanilmoqda' };
+  }
+
+  startShardChecker() {
+    if (this.shardCheckInterval) return;
+    this.shardCheckInterval = setInterval(() => {
+      if (!this.bot || this.manualStopped || !this.isAfk || this.status !== 'afk_active') return;
+
+      // Har 5 daqiqada (300 soniya) AFK hovuzida +10 shard beriladi
+      if (this.supervisor && this.supervisor.shardTracker) {
+        const newTotal = this.supervisor.shardTracker.addShards(10, 'afk_pool');
+        console.log(`[ShardTracker] 💎 +10 Shards (AFK Hovuzida 5 daqiqa). Jami: ${this.supervisor.shardTracker.formatCount(newTotal)} Shard`);
+      }
+
+      // Har 15 daqiqada bir marta serverdan aniq balansni so'rash
+      const now = Date.now();
+      if (now - this.lastShardCheck > 15 * 60 * 1000) {
+        this.lastShardCheck = now;
+        console.log(`[ShardTracker] Serverdan /shards balansi tekshirilmoqda...`);
+        this.safeChat('/shards', true);
+      }
+    }, 300000); // Har 5 daqiqa
   }
 
   safeStartAfkMovement() {
@@ -233,22 +354,41 @@ class SingleBotInstance {
     this.watchdogInterval = setInterval(() => {
       if (!this.bot || this.manualStopped || this.isCaptchaPending) return;
 
-      // Agar bot 'home' rejimida bo'lsa, uni AFK ga majburlamaymiz!
+      // 1. Agar bot Velocity navbatida bo'lsa, mutlaqo tegilmaydi!
+      if (this.isQueueWaiting || this.status === 'in_queue') {
+        const rem = Math.max(0, Math.ceil((this.queueDurationMs - (Date.now() - this.queueStartedAt)) / 1000));
+        console.log(`[Watchdog:${this.username}] Velocity navbat kutilmoqda (${rem}s qoldi). Hech qanday buyruq yuborilmaydi.`);
+        return;
+      }
+
+      // 2. Agar bot 'home' rejimida bo'lsa
       if (this.targetLocation === 'home') {
         if (this.currentServer === config.MC_SUBSERVER && this.status !== 'at_home') {
           console.log(`[Watchdog:${this.username}] Bot home rejimida, /home 1 qayta tekshirilmoqda...`);
-          this.safeChat('/home 1');
+          this.safeChat('/home 1', true);
           this.status = 'at_home';
         }
         return;
       }
 
-      // Agar bot Lobbiyda qolib ketgan bo'lsa yoki afk_active bo'lmasa, qayta tiklash
-      if (this.status !== 'afk_active' || !this.isAfk) {
-        console.log(`[Watchdog:${this.username}] Bot AFK rejimida emas (${this.status}, server: ${this.currentServer}). /server orqali tekshirilmoqda...`);
-        this.safeChat('/server');
+      // 3. Agar bot Lobby'da qolib ketgan bo'lsa
+      if (this.currentServer === 'lobby' || this.currentServer === 'hub') {
+        console.log(`[Watchdog:${this.username}] Bot Lobby'da turibdi. /server ${config.MC_SUBSERVER} yuborilmoqda va 80s navbat kutiladi...`);
+        this.safeChat(`/server ${config.MC_SUBSERVER}`, true);
+        this.startQueueWait(80000);
+        return;
       }
-    }, 35000); // Har 35 soniyada holatni tekshiradi
+
+      // 4. Agar bot Economy serverda bo'lsa, lekin AFK rejimida bo'lmasa
+      if (this.currentServer === config.MC_SUBSERVER && (this.status !== 'afk_active' || !this.isAfk)) {
+        console.log(`[Watchdog:${this.username}] Bot Economy serverda, lekin AFK emas (${this.status}). /afk yuborilmoqda...`);
+        this.safeChat('/afk', true);
+        this.isAfk = true;
+        this.status = 'afk_active';
+        this.safeStartAfkMovement();
+        this.startShardChecker();
+      }
+    }, 60000); // Har 60 soniyada holatni nazorat qiladi
   }
 
   handleMapCaptcha(data) {
@@ -314,7 +454,7 @@ class SingleBotInstance {
       this.cleanup();
     }
 
-    this.currentServer = 'hub';
+    this.currentServer = 'lobby';
     this.isAfk = false;
     this.hasLoggedIn = false;
     this.status = 'connecting';
@@ -347,30 +487,35 @@ class SingleBotInstance {
     bot.once('spawn', () => {
       console.log(`[Mineflayer:${this.username}] Muvaffaqiyatli serverga ulandi! (Server: ${this.currentServer})`);
       this.status = 'logged_in';
+      this.currentServer = 'lobby';
       this.startWatchdog();
 
       this.safeTimeout(() => {
         if (!this.hasLoggedIn && this.password) {
           console.log(`[Mineflayer:${this.username}] /login buyrug'i yuborilmoqda...`);
-          this.safeChat(`/login ${this.password}`);
+          this.safeChat(`/login ${this.password}`, true);
           this.hasLoggedIn = true;
         }
 
         this.safeTimeout(() => {
-          console.log(`[Mineflayer:${this.username}] Server holatini aniqlash (/server)...`);
-          this.safeChat('/server');
-          this.safeTimeout(() => {
-            if (config.MC_SUBSERVER && this.currentServer !== config.MC_SUBSERVER) {
-              console.log(`[Mineflayer:${this.username}] /server ${config.MC_SUBSERVER} ga o'tish buyrug'i yuborilmoqda...`);
-              this.safeChat(`/server ${config.MC_SUBSERVER}`);
-            }
-          }, 2500);
+          if (config.MC_SUBSERVER) {
+            console.log(`[Mineflayer:${this.username}] Lobby dan ${config.MC_SUBSERVER} ga o'tish (/server ${config.MC_SUBSERVER})...`);
+            this.safeChat(`/server ${config.MC_SUBSERVER}`, true);
+            this.startQueueWait(80000);
+          }
         }, 3000);
       }, 2000);
     });
 
     bot.on('respawn', () => {
       console.log(`[Mineflayer:${this.username}] Server yoki dunyo almashdi (respawn).`);
+      if (this.isQueueWaiting) {
+        if (this.queueTimer) {
+          clearTimeout(this.queueTimer);
+          this.queueTimer = null;
+        }
+        this.isQueueWaiting = false;
+      }
       this.currentServer = config.MC_SUBSERVER;
       this.safeTimeout(() => {
         if (this.targetLocation === 'home') {
@@ -379,10 +524,11 @@ class SingleBotInstance {
           this.isAfk = false;
         } else if (!this.isAfk) {
           console.log(`[Mineflayer:${this.username}] /afk rejimiga o'tilmoqda...`);
-          this.safeChat('/afk');
+          this.safeChat('/afk', true);
           this.isAfk = true;
           this.status = 'afk_active';
           this.safeStartAfkMovement();
+          this.startShardChecker();
         }
       }, 3500);
     });
@@ -429,7 +575,26 @@ class SingleBotInstance {
       this.lastMessage = clean;
       console.log(`[Mineflayer:${this.username}] [MSG] ${clean}`);
 
+      // Shard xabarlarini tahlil qilish
+      if (this.supervisor && this.supervisor.shardTracker) {
+        this.supervisor.shardTracker.parseChat(clean);
+      }
+
       const lower = clean.toLowerCase();
+
+      // Practice / KitPvP / Fallback ga tushib qolganini aniqlash:
+      const isPracticeOrDead = lower.includes('has been killed by') ||
+                               lower.includes('kitpvp') ||
+                               lower.includes('connected to practice') ||
+                               lower.includes('joined practice') ||
+                               lower.includes('[practice]') ||
+                               lower.includes('fallen into the void') ||
+                               (lower.includes('practice') && lower.includes('server'));
+      if (isPracticeOrDead) {
+        console.log(`[Mineflayer:${this.username}] 🚨 Practice/KitPvP serveri aniqlandi! Zudlik bilan Lobby ga qayta ulanilmoqda...`);
+        this.recoverToLobby();
+        return;
+      }
 
       // TPA so'rovlarini egadan kelganda avtomatik qabul qilish (Auto-TPACCEPT)
       const hasTpaPrompt = lower.includes('sent you a tpa request') || lower.includes('has requested') || lower.includes('teleport to you') || lower.includes('/tpaccept') || lower.includes('tpa');
@@ -440,18 +605,28 @@ class SingleBotInstance {
           const tpMatch = clean.match(/\/tpaccept\s+([a-zA-Z0-9_]+)/i);
           const targetPlayer = tpMatch ? tpMatch[1] : 'Fingoxenpro';
           this.safeTimeout(() => {
-            this.safeChat(`/tpaccept ${targetPlayer}`);
-            this.safeChat('/tpaccept');
+            this.safeChat(`/tpaccept ${targetPlayer}`, true);
+            this.safeChat('/tpaccept', true);
           }, 500);
         }
       }
 
-      // Agar /msg orqali egadan buyruq kelsa (!tp, !tpa, kel, !afk)
+      // Egadan kelgan barcha chat va buyruqlarni o'qish (Global chat, whisper, PM, rankli formatlar)
       const isOwnerMsg = (config.MC_OWNERS || []).some(o => lower.includes(o)) || lower.includes('fingoxen');
-      if (isOwnerMsg && (lower.includes('-> me') || lower.includes('whisper') || lower.includes('-> gotto') || lower.includes('[msg]'))) {
-        const parts = clean.split(':');
-        const text = parts.length > 1 ? parts.slice(1).join(':').trim() : clean;
-        handleOwnerCommand('Fingoxenpro', text);
+      if (isOwnerMsg) {
+        // Chat formatlari: "Fingoxenpro: !tp", "[VIP] Fingoxenpro: kel", "Fingoxenpro » !tp", "Fingoxenpro -> me: !tp"
+        const chatMatch = clean.match(/^(?:\[[^\]]+\]\s*)?([a-zA-Z0-9_]{3,16})\s*(?::|»|>|->\s*(?:me|gotto):?)\s*(.+)$/i);
+        if (chatMatch) {
+          const sender = chatMatch[1];
+          const text = chatMatch[2].trim();
+          handleOwnerCommand(sender, text);
+        } else {
+          // Xabar matnida egasi va buyruq so'zi bo'lsa (masalan: kel, !tp, !tpa, !afk)
+          const cmdMatch = clean.match(/(!tp|!tpa|!tpaccept|!afk|\bkel\b|\bqabul\b)/i);
+          if (cmdMatch) {
+            handleOwnerCommand('Fingoxenpro', cmdMatch[1]);
+          }
+        }
       }
 
       // Home ga yetib kelganini aniqlash
@@ -459,10 +634,9 @@ class SingleBotInstance {
         this.status = 'at_home';
         this.isAfk = false;
         this.targetLocation = 'home';
-        console.log(`[Mineflayer:${this.username}] Bot muvaffaqiyatli /home 1 ga keldi! Fingoxenpro chaqirilmoqda...`);
+        console.log(`[Mineflayer:${this.username}] Bot muvaffaqiyatli /home 1 ga keldi! Fingoxenpro xabardor qilinmoqda...`);
         this.safeTimeout(() => {
-          this.safeChat('/tpahere Fingoxenpro');
-          this.safeChat('/msg Fingoxenpro Men /home 1 daman, /tpa Gotto deb yozing!');
+          this.safeChat('/msg Fingoxenpro Men /home 1 daman, /tpa Gotto deb yozing!', true);
         }, 1200);
       }
 
@@ -471,8 +645,7 @@ class SingleBotInstance {
         console.log(`[Mineflayer:${this.username}] Fingoxenpro serverga kirdi!`);
         if (this.targetLocation === 'home' || this.status === 'at_home') {
           this.safeTimeout(() => {
-            this.safeChat('/tpahere Fingoxenpro');
-            this.safeChat('/msg Fingoxenpro Men /home 1 daman, /tpa Gotto deb yozing!');
+            this.safeChat('/msg Fingoxenpro Men /home 1 daman, /tpa Gotto deb yozing!', true);
           }, 2000);
         }
       }
@@ -488,12 +661,20 @@ class SingleBotInstance {
         this.currentServer = config.MC_SUBSERVER;
         this.status = 'afk_active';
         this.safeStartAfkMovement();
+        this.startShardChecker();
         console.log(`[Mineflayer:${this.username}] Bot rasman AFK hududida (afk_active)!`);
       }
 
       // Economy serverga tushganini aniqlash
       const sub = (config.MC_SUBSERVER || 'economy').toLowerCase();
       if (lower.includes(`sending you to ${sub}`) || lower.includes(`connected to ${sub}`) || lower.includes(`joined ${sub}`) || lower.includes(`[${sub}]`)) {
+        if (this.isQueueWaiting) {
+          if (this.queueTimer) {
+            clearTimeout(this.queueTimer);
+            this.queueTimer = null;
+          }
+          this.isQueueWaiting = false;
+        }
         this.currentServer = config.MC_SUBSERVER;
         this.status = 'in_economy';
         console.log(`[Mineflayer:${this.username}] ${config.MC_SUBSERVER} serveriga muvaffaqiyatli o'tildi!`);
@@ -501,25 +682,29 @@ class SingleBotInstance {
         this.safeTimeout(() => {
           if (!this.isAfk && this.targetLocation === 'afk') {
             console.log(`[Mineflayer:${this.username}] /afk rejimiga o'tilmoqda...`);
-            this.safeChat('/afk');
+            this.safeChat('/afk', true);
             this.isAfk = true;
             this.status = 'afk_active';
             this.safeStartAfkMovement();
+            this.startShardChecker();
           } else if (this.targetLocation === 'home') {
             console.log(`[Mineflayer:${this.username}] Home 1 ga o'tilmoqda...`);
-            this.safeChat('/home 1');
+            this.safeChat('/home 1', true);
           }
         }, 3000);
       }
 
       // Agar lobbiyda ekanligi aniqlansa
       if (lower.includes('connected to lobby') || lower.includes('connected to hub') || lower.includes('joined lobby')) {
-        this.currentServer = 'hub';
+        this.currentServer = 'lobby';
         this.isAfk = false;
-        console.log(`[Mineflayer:${this.username}] Lobbiyda ekanligi aniqlandi. ${config.MC_SUBSERVER} ga o'tish yuborilmoqda...`);
-        this.safeTimeout(() => {
-          this.safeChat(`/server ${config.MC_SUBSERVER}`);
-        }, 1500);
+        if (!this.isQueueWaiting) {
+          console.log(`[Mineflayer:${this.username}] Lobbiyda ekanligi aniqlandi. ${config.MC_SUBSERVER} ga o'tish yuborilmoqda va 80s navbat kutiladi...`);
+          this.safeTimeout(() => {
+            this.safeChat(`/server ${config.MC_SUBSERVER}`, true);
+            this.startQueueWait(80000);
+          }, 1500);
+        }
       }
 
       // Ro'yxatdan o'tish so'ralsa
@@ -527,7 +712,7 @@ class SingleBotInstance {
         this.safeTimeout(() => {
           if (this.password) {
             console.log(`[Mineflayer:${this.username}] /register buyrug'i yuborilmoqda...`);
-            this.safeChat(`/register ${this.password} ${this.password}`);
+            this.safeChat(`/register ${this.password} ${this.password}`, true);
             this.hasLoggedIn = true;
           }
         }, 1200);
@@ -536,7 +721,7 @@ class SingleBotInstance {
       else if (lower.includes('/login') || lower.includes('parol')) {
         this.safeTimeout(() => {
           if (this.password) {
-            this.safeChat(`/login ${this.password}`);
+            this.safeChat(`/login ${this.password}`, true);
             this.hasLoggedIn = true;
           }
         }, 1200);
@@ -604,6 +789,16 @@ class SingleBotInstance {
 
   cleanup() {
     this.clearAllTimers();
+    if (this.queueTimer) {
+      clearTimeout(this.queueTimer);
+      this.queueTimer = null;
+    }
+    this.isQueueWaiting = false;
+    this.queueStartedAt = null;
+    if (this.shardCheckInterval) {
+      clearInterval(this.shardCheckInterval);
+      this.shardCheckInterval = null;
+    }
     if (this.bot) {
       try {
         this.bot.removeAllListeners();
@@ -612,7 +807,7 @@ class SingleBotInstance {
       } catch (_) {}
       this.bot = null;
     }
-    this.currentServer = 'hub';
+    this.currentServer = 'lobby';
     this.isAfk = false;
     this.hasLoggedIn = false;
     this.isCaptchaPending = false;
@@ -653,6 +848,9 @@ class Minecraft247Bot {
     // 4x Vote Tracker
     this.tracker = new VoteTracker();
 
+    // Shard Tracker (Doimiy AFK shard monitoring)
+    this.shardTracker = new ShardTracker();
+
     // Veb Server
     this.webServer = new WebServer(
       config.PORT,
@@ -687,6 +885,7 @@ class Minecraft247Bot {
     return {
       bot: this.primaryBot.getSummary(),
       bots: this.bots.map(b => b.getSummary()),
+      shards: this.shardTracker.getSummary(),
       vote: this.tracker.getSummary(),
       config: {
         host: config.MC_HOST,
@@ -709,6 +908,16 @@ class Minecraft247Bot {
     return success;
   }
 
+  recoverAfk(targetBotName = 'all') {
+    let lastRes = null;
+    for (const b of this.bots) {
+      if (!targetBotName || targetBotName === 'all' || b.username.toLowerCase() === targetBotName.toLowerCase()) {
+        lastRes = b.recoverAfk();
+      }
+    }
+    return lastRes || { success: true, message: 'AFK tiklash harakati yuborildi' };
+  }
+
   handleWebAction(actionPath, payload) {
     if (actionPath === '/api/bot/start') {
       const target = payload && payload.bot ? String(payload.bot) : 'all';
@@ -722,6 +931,23 @@ class Minecraft247Bot {
       return { success: true, message: `Bot(${target}) to'xtatildi` };
     }
 
+    if (actionPath === '/api/bot/recover_afk') {
+      const target = payload && payload.bot ? String(payload.bot) : 'all';
+      const res = this.recoverAfk(target);
+      return res;
+    }
+
+    if (actionPath === '/api/shards/check') {
+      const ok = this.safeChat('/shards', 'all');
+      return { success: ok, message: ok ? 'Serverga /shards tekshirish buyrug\'i yuborildi' : 'Bot faol emas' };
+    }
+
+    if (actionPath === '/api/shards/add') {
+      const amount = (payload && payload.amount) ? parseInt(payload.amount, 10) : 10;
+      const total = this.shardTracker.addShards(amount, 'manual_web');
+      return { success: true, message: `+${amount} Shards qo'shildi. Jami: ${this.shardTracker.formatCount(total)}`, total };
+    }
+
     if (actionPath === '/api/captcha/solve') {
       const code = (payload && payload.code) ? String(payload.code).trim() : '';
       if (!code) return { success: false, message: 'Kod kiritilmagan' };
@@ -733,7 +959,7 @@ class Minecraft247Bot {
       }
 
       console.log(`[Mineflayer:${targetBot.username}] Veb panel orqali captcha kodi kiritildi: "${code}"`);
-      const ok = targetBot.safeChat(code);
+      const ok = targetBot.safeChat(code, true);
       targetBot.isCaptchaPending = false;
       return { success: ok, message: ok ? `Kod (${targetBot.username}) yuborildi: ${code}` : 'Bot faol emas' };
     }
@@ -743,7 +969,7 @@ class Minecraft247Bot {
       if (!text) return { success: false, message: 'Xabar bo\'sh bo\'lishi mumkin emas' };
       const target = payload && payload.bot ? String(payload.bot) : 'all';
       const ok = this.safeChat(text, target);
-      return { success: ok, message: ok ? `Xabar yuborildi: ${text}` : 'Bot(lar) faol emas' };
+      return { success: ok, message: ok ? `Xabar yuborildi: ${text}` : 'Bot(lar) faol emas yoki navbatda' };
     }
 
     if (actionPath === '/api/vote/record') {

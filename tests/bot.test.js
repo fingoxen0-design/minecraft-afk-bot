@@ -17,7 +17,7 @@ test('Minecraft247Bot - initialization and status', () => {
   assert.strictEqual(status.bots[0].username, 'Gotto');
 });
 
-test('Minecraft247Bot - web actions routing', () => {
+test('Minecraft247Bot - web actions routing and shards', () => {
   const bot = new Minecraft247Bot();
 
   // Test vote recording via web action
@@ -33,6 +33,64 @@ test('Minecraft247Bot - web actions routing', () => {
   const urlRes = bot.handleWebAction('/api/vote/set_url', { vote_id: 2, url: 'https://test2.com', name: 'Server 2' });
   assert.strictEqual(urlRes.success, true);
   assert.strictEqual(bot.tracker.getVoteUrl(2), 'https://test2.com');
+
+  // Test recover_afk action (mock start to prevent real network connection in unit test)
+  bot.primaryBot.start = () => {};
+  const recoverRes = bot.handleWebAction('/api/bot/recover_afk', {});
+  assert.strictEqual(recoverRes.success, true);
+
+  // Test shards check & add actions
+  const shardAddRes = bot.handleWebAction('/api/shards/add', { amount: 20 });
+  assert.strictEqual(shardAddRes.success, true);
+  assert.ok(bot.shardTracker.state.total_shards >= 6120);
+
+  const status = bot.getSystemStatus();
+  assert.ok(status.shards);
+  assert.strictEqual(typeof status.shards.total, 'number');
+
+  bot.stop();
+});
+
+test('SingleBotInstance - Velocity queue protection blocks chat and allows force', () => {
+  const bot = new Minecraft247Bot();
+  const instance = bot.primaryBot;
+
+  // Mock bot chat
+  let lastChat = '';
+  instance.bot = {
+    chat: (msg) => { lastChat = msg; }
+  };
+
+  // Initially not in queue
+  assert.strictEqual(instance.isQueueWaiting, false);
+  const ok1 = instance.safeChat('test message 1');
+  assert.strictEqual(ok1, true);
+  assert.strictEqual(lastChat, 'test message 1');
+
+  // Start queue wait
+  instance.startQueueWait(80000);
+  assert.strictEqual(instance.isQueueWaiting, true);
+  assert.strictEqual(instance.status, 'in_queue');
+
+  // Safe chat must be blocked without force to prevent velocity kick
+  const ok2 = instance.safeChat('hello during queue');
+  assert.strictEqual(ok2, false);
+  assert.strictEqual(lastChat, 'test message 1'); // Did not change
+
+  // Forced chat is allowed
+  const ok3 = instance.safeChat('forced command', true);
+  assert.strictEqual(ok3, true);
+  assert.strictEqual(lastChat, 'forced command');
+
+  // Summary reflects queue
+  const summary = instance.getSummary();
+  assert.strictEqual(summary.is_queue_waiting, true);
+  assert.ok(summary.queue_remaining_seconds > 0 && summary.queue_remaining_seconds <= 80);
+
+  // Cleanup resets queue state and currentServer to lobby
+  instance.cleanup();
+  assert.strictEqual(instance.isQueueWaiting, false);
+  assert.strictEqual(instance.currentServer, 'lobby');
 });
 
 test('Minecraft247Bot - clean text extraction from NBT/Compound', () => {
