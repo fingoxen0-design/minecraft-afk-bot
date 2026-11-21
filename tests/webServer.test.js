@@ -55,15 +55,25 @@ test('WebServer - GET /health and /logs', async () => {
     const logs = await get('http://127.0.0.1:55541/logs');
     assert.strictEqual(logs.status, 200);
     assert.ok(logs.body.includes('Minecraft 24/7 AFK Bot'));
+    assert.ok(logs.body.includes('dash-shards-total'));
+    assert.ok(logs.body.includes('dash-subserver-badge'));
+    assert.ok(logs.body.includes('btn-hero-recover'));
+    assert.ok(logs.body.includes('recoverAfkAction'));
   } finally {
     ws.stop();
   }
 });
 
-test('WebServer - POST actions', async () => {
+test('WebServer - POST actions and new AFK recovery & shards routing', async () => {
   const actionHandler = (path, payload) => {
     if (path === '/api/bot/chat') {
       return { success: true, text: payload.text };
+    }
+    if (path === '/api/bot/recover_afk') {
+      return { success: true, message: 'Recover triggered' };
+    }
+    if (path === '/api/shards/check') {
+      return { success: true, message: 'Shards check triggered' };
     }
     return { success: false };
   };
@@ -74,10 +84,20 @@ test('WebServer - POST actions', async () => {
   await new Promise(r => setTimeout(r, 100));
 
   try {
-    const res = await post('http://127.0.0.1:55542/api/bot/chat', { text: '/server economy' });
-    assert.strictEqual(res.status, 200);
-    assert.strictEqual(res.body.success, true);
-    assert.strictEqual(res.body.text, '/server economy');
+    const res1 = await post('http://127.0.0.1:55542/api/bot/chat', { text: '/server economy' });
+    assert.strictEqual(res1.status, 200);
+    assert.strictEqual(res1.body.success, true);
+    assert.strictEqual(res1.body.text, '/server economy');
+
+    const res2 = await post('http://127.0.0.1:55542/api/bot/recover_afk', { bot: 'all' });
+    assert.strictEqual(res2.status, 200);
+    assert.strictEqual(res2.body.success, true);
+    assert.strictEqual(res2.body.message, 'Recover triggered');
+
+    const res3 = await post('http://127.0.0.1:55542/api/shards/check', {});
+    assert.strictEqual(res3.status, 200);
+    assert.strictEqual(res3.body.success, true);
+    assert.strictEqual(res3.body.message, 'Shards check triggered');
   } finally {
     ws.stop();
   }

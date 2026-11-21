@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft 24/7 AFK Bot — Render Dashboard</title>
+    <style>
+        :root {
+            --bg: #090d14;
+            --header-bg: #121824;
+            --card-bg: #151d2a;
+            --card-hover: #192334;
+            --border: #232f42;
+            --text: #d8e2ec;
+            --text-muted: #8191a6;
+            --accent: #58a6ff;
+            --accent-glow: rgba(88, 166, 255, 0.25);
+            --green: #2ea043;
+            --green-glow: rgba(46, 160, 67, 0.25);
+            --yellow: #d29922;
+            --yellow-glow: rgba(210, 153, 34, 0.25);
+            --purple: #bc8cff;
+            --red: #f85149;
+            --gold: #f59e0b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        header {
+            background: var(--header-bg);
+            border-bottom: 1px solid var(--border);
+            padding: 10px 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        .brand { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .title { font-size: 15px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
+        .live-badge {
+            background: rgba(46, 160, 67, 0.15);
+            color: var(--green);
+            border: 1px solid rgba(46, 160, 67, 0.35);
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .live-badge.gold {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--gold);
+            border-color: rgba(245, 158, 11, 0.4);
+        }
+        .live-badge.blue {
+            background: rgba(88, 166, 255, 0.15);
+            color: var(--accent);
+            border-color: rgba(88, 166, 255, 0.4);
+        }
+        .live-dot {
+            width: 7px;
+            height: 7px;
+            background: currentColor;
+            border-radius: 50%;
+            animation: pulse 1.6s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.35; transform: scale(0.85); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: #0d121c;
+            padding: 3px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            flex-wrap: wrap;
+        }
+        .tab-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
+        .tab-btn.active {
+            background: #1c2636;
+            color: var(--accent);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        main {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .view {
+            display: none;
+            height: 100%;
+            overflow-y: auto;
+        }
+        .view.active { display: block; }
+
+        /* HERO & DASHBOARD STYLES */
+        .dash-container {
+            padding: 16px 18px;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .hero-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+            gap: 14px;
+        }
+        .hero-card {
+            background: linear-gradient(145deg, #162030, #131a26);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 12px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+        .hero-card:hover {
+            transform: translateY(-2px);
+            border-color: #384a66;
+        }
+        .hero-card.shard-card {
+            border-left: 4px solid var(--gold);
+        }
+        .hero-card.server-card {
+            border-left: 4px solid var(--green);
+        }
+        .hero-card.action-card {
+            border-left: 4px solid var(--accent);
+        }
+        .hero-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .hero-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .hero-value-big {
+            font-size: 34px;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+        .hero-value-big.gold { color: var(--gold); text-shadow: 0 0 16px rgba(245, 158, 11, 0.35); }
+        .hero-subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+        .badge-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 6px 12px;
+            border-radius: 6px;
+            width: fit-content;
+        }
+        .badge-status-green {
+            background: rgba(46, 160, 67, 0.18);
+            color: var(--green);
+            border: 1px solid rgba(46, 160, 67, 0.4);
+        }
+        .badge-status-yellow {
+            background: rgba(210, 153, 34, 0.18);
+            color: var(--yellow);
+            border: 1px solid rgba(210, 153, 34, 0.4);
+        }
+        .badge-status-blue {
+            background: rgba(88, 166, 255, 0.18);
+            color: var(--accent);
+            border: 1px solid rgba(88, 166, 255, 0.4);
+        }
+        .badge-status-red {
+            background: rgba(248, 81, 73, 0.18);
+            color: var(--red);
+            border: 1px solid rgba(248, 81, 73, 0.4);
+        }
+        .btn-hero-recover {
+            background: linear-gradient(135deg, #238636, #2ea043);
+            color: #fff;
+            border: none;
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(46, 160, 67, 0.35);
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+        }
+        .btn-hero-recover:hover {
+            background: linear-gradient(135deg, #2ea043, #3fb950);
+            box-shadow: 0 6px 16px rgba(46, 160, 67, 0.5);
+            transform: translateY(-1px);
+        }
+        .btn-hero-recover:active {
+            transform: translateY(1px);
+        }
+        .btn-tool-action {
+            background: #1c2636;
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 7px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .btn-tool-action:hover {
+            background: #253347;
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        /* PROGRESS BAR FOR VELOCITY QUEUE */
+        .progress-track {
+            background: #0f141f;
+            border-radius: 6px;
+            height: 7px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            margin-top: 4px;
+        }
+        .progress-fill {
+            background: linear-gradient(90deg, #d29922, #f59e0b);
+            height: 100%;
+            width: 0%;
+            transition: width 0.4s ease;
+        }
+
+        /* SECONDARY GRID FOR BOTS & VOTES */
+        .secondary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 14px;
+        }
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .card-header {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .stat-val { font-size: 18px; font-weight: 700; color: #fff; }
+        .stat-desc { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+        .vote-btn-group { display: flex; gap: 8px; margin-top: 4px; }
+        .btn-vote-link {
+            background: #238636;
+            color: #fff;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn-vote-link:hover { background: #2ea043; }
+        .btn-vote-action {
+            background: #1c2636;
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .btn-vote-action:hover { background: #253347; color: #fff; }
+
+        /* IN-GAME CHAT VIEW */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 12px 16px;
+            gap: 10px;
+        }
+        .chat-messages-box {
+            flex: 1;
+            background: #0b0f16;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 14px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+        .chat-msg-row {
+            display: flex;
+            gap: 8px;
+            align-items: baseline;
+            padding: 2px 4px;
+            border-radius: 4px;
+            word-break: break-word;
+        }
+        .chat-msg-row:hover { background: rgba(255,255,255,0.02); }
+        .chat-msg-time { font-size: 11px; color: var(--text-muted); flex-shrink: 0; user-select: none; }
+        .chat-msg-author { font-weight: 700; color: #58a6ff; flex-shrink: 0; }
+        .chat-msg-author.owner { color: #f59e0b; }
+        .chat-msg-author.bot { color: #3fb950; }
+        .chat-msg-author.system { color: #bc8cff; }
+        .chat-msg-text { color: #e6edf3; }
+        .chat-msg-text.shard-reward { color: #ffd700; font-weight: 600; }
+        .chat-msg-text.tpa-alert { color: #58a6ff; font-weight: 600; }
+
+        .chat-controls-bar {
+            background: var(--header-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .chat-input-row { display: flex; gap: 8px; align-items: center; }
+        .chat-input {
+            flex: 1;
+            background: #090d14;
+            border: 1px solid var(--border);
+            color: #fff;
+            padding: 9px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+        }
+        .chat-input:focus { border-color: var(--accent); }
+        .btn-send {
+            background: #1f6feb;
+            color: #fff;
+            border: none;
+            padding: 9px 18px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-send:hover { background: #388bfd; }
+        .quick-chips-wrapper {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+        }
+        .quick-chip {
+            background: #162030;
+            color: #79c0ff;
+            border: 1px solid #233348;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 9px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .quick-chip:hover {
+            background: #233348;
+            color: #fff;
+            border-color: #58a6ff;
+            transform: translateY(-1px);
+        }
+
+        /* TERMINAL LOGS VIEW */
+        .terminal-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .toolbar {
+            background: var(--header-bg);
+            border-bottom: 1px solid var(--border);
+            padding: 8px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        .filters { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+        .chip {
+            background: #162030;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 14px;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.15s;
+        }
+        .chip:hover, .chip.active {
+            background: rgba(88, 166, 255, 0.15);
+            border-color: var(--accent);
+            color: var(--accent);
+            font-weight: 600;
+        }
+        .search-box {
+            background: #090d14;
+            border: 1px solid var(--border);
+            color: #fff;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            outline: none;
+            width: 170px;
+        }
+        .search-box:focus { border-color: var(--accent); }
+        .actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+        button.tool-btn {
+            background: #162030;
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 5px 11px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        button.tool-btn:hover { background: #233348; color: #fff; }
+        .btn-toggle-on { border-color: rgba(46, 160, 67, 0.6) !important; color: var(--green) !important; }
+        .btn-toggle-off { opacity: 0.6; }
+        #terminal-view {
+            background: #080c12;
+            color: #e6edf3;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+            font-size: 12.5px;
+            line-height: 1.5;
+            padding: 12px 18px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            flex: 1;
+            overflow-y: auto;
+        }
+        .log-line { padding: 1px 0; display: flex; gap: 10px; }
+        .log-time { color: var(--text-muted); font-size: 11px; flex-shrink: 0; user-select: none; }
+        .log-info { color: #c9d1d9; }
+        .log-success { color: var(--green); }
+        .log-warn { color: var(--yellow); }
+        .log-error { color: var(--red); font-weight: 600; }
+        .log-mineflayer { color: #58a6ff; }
+        .log-system { color: #d2a8ff; }
+        .log-keepalive { color: #8b949e; font-style: italic; }
+
+        /* FOOTER & TOAST */
+        footer {
+            background: var(--header-bg);
+            border-top: 1px solid var(--border);
+            padding: 7px 18px;
+            font-size: 11px;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        #toast-banner {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #1c2636;
+            color: #fff;
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 10px 16px;
+            font-size: 13px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+            display: none;
+            z-index: 1000;
+            animation: slideIn 0.25s ease;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(15px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        /* RESPONSIVE BREAKPOINTS (MOBIL QULAYLIK) */
+        @media (max-width: 820px) {
+            header {
+                flex-direction: column;
+                align-items: stretch;
+                padding: 10px 14px;
+                gap: 8px;
+            }
+            .brand { justify-content: space-between; }
+            .tabs { width: 100%; justify-content: space-around; }
+            .tab-btn { flex: 1; text-align: center; justify-content: center; padding: 7px 4px; font-size: 11px; }
+            .dash-container { padding: 12px; gap: 12px; }
+            .hero-grid { grid-template-columns: 1fr; gap: 10px; }
+            .secondary-grid { grid-template-columns: 1fr; gap: 10px; }
+            .toolbar { flex-direction: column; align-items: stretch; padding: 8px 12px; }
+            .filters, .actions { justify-content: space-between; }
+            .search-box { width: 100%; }
+            #captcha-alert-banner { margin: 8px 12px !important; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="brand">
+            <div class="title">🎮 Minecraft 24/7 AFK Bot (Gotto)</div>
+            <div class="live-badge"><span class="live-dot"></span> ONLAYN</div>
+            <div class="live-badge gold"><span class="live-dot"></span> 💎 <span id="header-shards">6.1K</span></div>
+            <div class="live-badge blue"><span class="live-dot"></span> <span id="header-ping">-- ms</span></div>
+        </div>
+        <div class="tabs">
+            <button id="btn-tab-dash" class="tab-btn active" onclick="switchTab('dashboard')">💎 Monitoring & AFK</button>
+            <button id="btn-tab-chat" class="tab-btn" onclick="switchTab('chat')">💬 O'yin Chati</button>
+            <button id="btn-tab-terminal" class="tab-btn" onclick="switchTab('terminal')">📜 Tizim Loglari</button>
+        </div>
+    </header>
+
+    <!-- LIVE CAPTCHA ALERT CARD -->
+    <div id="captcha-alert-banner" style="display: none; background: #2b1117; border: 2px solid #f85149; border-radius: 8px; padding: 14px 18px; margin: 10px 18px; flex-shrink: 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+            <div style="font-weight: 700; color: #ff7b72; font-size: 15px; display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 18px;">🚨</span> ALLAYSMP XARITA CAPTCHA TALAB QILINDI <span id="captcha-bot-label" style="color: #58a6ff;"></span>!
+            </div>
+            <span style="font-size: 12px; color: #8b949e;">Server 30 soniya kutadi</span>
+        </div>
+        <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+            <img id="captcha-img" src="/api/captcha.png" alt="Captcha Xaritasi" style="width: 256px; height: 256px; image-rendering: pixelated; border: 2px solid #58a6ff; border-radius: 6px; background: #fff;">
+            <div style="display: flex; flex-direction: column; gap: 12px; max-width: 340px;">
+                <p style="font-size: 13px; color: #c9d1d9;">Xaritadagi <b>4 ta belgi</b>ni yozing va Yuborishni bosing (yoki Enter):</p>
+                <div style="display: flex; gap: 8px;">
+                    <input id="captcha-input" type="text" placeholder="4 ta belgi..." maxlength="6" style="padding: 10px 14px; font-size: 18px; font-weight: bold; letter-spacing: 4px; text-transform: uppercase; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #fff; width: 170px; text-align: center; outline: none;" onkeydown="if(event.key==='Enter') submitCaptchaCode()">
+                    <button class="tool-btn" style="background: #238636; color: #fff; border-color: #2ea043; padding: 10px 18px; font-size: 14px; font-weight: 600;" onclick="submitCaptchaCode()">✅ Yuborish</button>
+                </div>
+                <div id="captcha-feedback" style="font-size: 12px; color: #58a6ff;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast-banner"></div>
+
+    <main>
+        <!-- 1. DASHBOARD & MONITORING VIEW (ACTIVE BY DEFAULT) -->
+        <div id="view-dashboard" class="view active">
+            <div class="dash-container">
+                <!-- HERO WIDGETS -->
+                <div class="hero-grid">
+                    <!-- WIDGET 1: KATTA SHARD HISOBALAGICH -->
+                    <div class="hero-card shard-card">
+                        <div>
+                            <div class="hero-header">
+                                <span class="hero-title">💎 Shards Monitoring</span>
+                                <span class="live-badge gold"><span class="live-dot"></span> ALLAY SMP</span>
+                            </div>
+                            <div class="hero-value-big gold" style="margin-top: 10px;">
+                                <span id="dash-shards-total">6.1K</span>
+                                <span style="font-size: 15px; color: var(--text-muted); font-weight: 500;">Shard</span>
+                            </div>
+                            <div class="hero-subtitle" style="margin-top: 6px;">
+                                Jami aniq: <b id="dash-shards-exact" style="color: #fff;">6,100</b> Shards
+                            </div>
+                            <div class="hero-subtitle" style="color: var(--green); font-weight: 600; margin-top: 2px;">
+                                ⚡️ Ushbu sessiyada: +<span id="dash-shards-session">0</span> Shards (har 5 daqiqada +10)
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <button class="btn-tool-action" style="width: 100%;" onclick="checkShardsAction()">
+                                🔄 Serverdan Shard Balansini Tekshirish (/shards)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- WIDGET 2: SUBSERVER INDIKATORI & NAVBAT -->
+                    <div class="hero-card server-card">
+                        <div>
+                            <div class="hero-header">
+                                <span class="hero-title">🌐 Subserver & AFK Holati</span>
+                                <span class="live-badge blue" id="dash-ping-badge">Ping: -- ms</span>
+                            </div>
+                            <div style="margin-top: 10px;">
+                                <div id="dash-subserver-badge" class="badge-status badge-status-green">
+                                    🟢 ECONOMY (AFK Hovuzida faol)
+                                </div>
+                            </div>
+                            <div class="hero-subtitle" style="margin-top: 10px;">
+                                Server: <b>allaysmp.pro:25565</b> (MC 1.21.1)
+                            </div>
+                            <div class="hero-subtitle" style="margin-top: 2px;">
+                                Bot holati: <b id="dash-bot-status-text" style="color: #fff;">afk_active</b> • Joylashuv: <b id="dash-target-loc">afk</b>
+                            </div>
+
+                            <!-- VELOCITY QUEUE PROGRESS BAR -->
+                            <div id="queue-box" style="display: none; margin-top: 10px;">
+                                <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:700; color:var(--yellow); margin-bottom: 4px;">
+                                    <span>⏳ Velocity Navbat (60-80s)</span>
+                                    <span id="queue-timer-val">80s qoldi</span>
+                                </div>
+                                <div class="progress-track"><div id="queue-progress-bar" class="progress-fill"></div></div>
+                                <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Kick xatosi oldini olish uchun buyruqlar bloklangan</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <button class="btn-tool-action" style="width: 100%;" onclick="quickSend('/afk')">
+                                ⚡️ /afk buyrug'ini yuborish
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- WIDGET 3: 1-BOSISHDA AFK GA QAYTARISH TUGMASI -->
+                    <div class="hero-card action-card">
+                        <div>
+                            <div class="hero-header">
+                                <span class="hero-title">🔄 Avto-Tiklash Tizimi</span>
+                                <span class="live-badge"><span class="live-dot"></span> XAVFSIZ</span>
+                            </div>
+                            <div style="margin-top: 10px;">
+                                <button class="btn-hero-recover" onclick="recoverAfkAction()">
+                                    🔄 Bir bosishda AFK ga qaytarish
+                                </button>
+                            </div>
+                            <div class="hero-subtitle" style="margin-top: 12px; line-height: 1.5;">
+                                Bot adashsa (Practice/Lobby) yoki kick bo'lsa, avtomatik zanjirni ishga tushiradi:
+                                <div style="color: #58a6ff; font-weight: 600; margin-top: 4px;">
+                                    Lobby ➔ 80s Xavfsiz Navbat ➔ Economy ➔ /afk hovuzi
+                                </div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px; margin-top: 10px;">
+                            <button class="btn-tool-action" style="flex: 1;" onclick="botAction('start')">▶️ Start</button>
+                            <button class="btn-tool-action" style="flex: 1;" onclick="botAction('stop')">⏹ Stop</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECONDARY GRID (BOT PROFILI, KEEP-ALIVE, 4x VOTE) -->
+                <div class="secondary-grid">
+                    <div id="bots-cards-container" style="display: contents;">
+                        <div class="card">
+                            <div class="card-header">Bot #1: Gotto 🎮</div>
+                            <div id="stat-bot-status" class="stat-val" style="color: var(--green);">Faol (24/7 AFK)</div>
+                            <div id="stat-bot-server" class="stat-desc">Server: allaysmp.pro (economy)</div>
+                            <div id="stat-bot-uptime" class="stat-desc">Ish vaqti: ...</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">Render Anti-Sleep ⚡️</div>
+                        <div class="stat-val" style="color: var(--yellow);">Uyg'oq (24/7)</div>
+                        <div class="stat-desc">Keep-alive pinger Render serverni uxlatmasdan uzluksiz ishlatadi</div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Interval: har 3 daqiqada /health ping</div>
+                    </div>
+
+                    <!-- 4x VOTE SLOTS -->
+                    <div class="card">
+                        <div class="card-header">Vote #1: Minecraft-MP 🗳</div>
+                        <div id="vote-1-time" class="stat-val">Yuklanmoqda...</div>
+                        <div class="vote-btn-group">
+                            <a id="vote-1-link" href="#" target="_blank" class="btn-vote-link">🔗 Ovoz berish</a>
+                            <button class="btn-vote-action" onclick="recordVote(1)">✅ Ovoz berdim</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">Vote #2: MinecraftServers 🗳</div>
+                        <div id="vote-2-time" class="stat-val">Yuklanmoqda...</div>
+                        <div class="vote-btn-group">
+                            <a id="vote-2-link" href="#" target="_blank" class="btn-vote-link">🔗 Ovoz berish</a>
+                            <button class="btn-vote-action" onclick="recordVote(2)">✅ Ovoz berdim</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">Vote #3 🗳</div>
+                        <div id="vote-3-time" class="stat-val">Yuklanmoqda...</div>
+                        <div class="vote-btn-group">
+                            <a id="vote-3-link" href="#" target="_blank" class="btn-vote-link">🔗 Ovoz berish</a>
+                            <button class="btn-vote-action" onclick="recordVote(3)">✅ Ovoz berdim</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">Vote #4 🗳</div>
+                        <div id="vote-4-time" class="stat-val">Yuklanmoqda...</div>
+                        <div class="vote-btn-group">
+                            <a id="vote-4-link" href="#" target="_blank" class="btn-vote-link">🔗 Ovoz berish</a>
+                            <button class="btn-vote-action" onclick="recordVote(4)">✅ Ovoz berdim</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. IN-GAME CHAT VIEW -->
+        <div id="view-chat" class="view">
+            <div class="chat-container">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 2px 4px;">
+                    <div style="font-size: 13px; font-weight: 700; color: #58a6ff;">💬 Minecraft Jonli Server Chati</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">Faqat o'yin ichidagi xabarlar va hodisalar</div>
+                </div>
+
+                <div id="ingame-chat-box" class="chat-messages-box">
+                    <div class="chat-msg-row">
+                        <span class="chat-msg-time">--:--:--</span>
+                        <span class="chat-msg-author system">[Tizim]</span>
+                        <span class="chat-msg-text">O'yin ichidagi xabarlar kutilmoqda...</span>
+                    </div>
+                </div>
+
+                <div class="chat-controls-bar">
+                    <div class="chat-input-row">
+                        <select id="chat-target" class="search-box" style="width: 140px; cursor: pointer;">
+                            <option value="all">Barchasi (All)</option>
+                            <option value="Gotto">Gotto</option>
+                        </select>
+                        <input type="text" id="chat-msg" class="chat-input" placeholder="O'yin chatiga xabar yoki buyruq yozing..." onkeydown="if(event.key==='Enter') sendChatMessage()">
+                        <button class="btn-send" onclick="sendChatMessage()">Yuborish</button>
+                    </div>
+
+                    <!-- KENGAYTIRILGAN TEZKOR BUYRUQLAR (QUICK CHIPS) -->
+                    <div class="quick-chips-wrapper">
+                        <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">⚡️ Tezkor:</span>
+                        <button class="quick-chip" onclick="quickSend('/afk')">⚡️ /afk</button>
+                        <button class="quick-chip" onclick="quickSend('/server economy')">🔄 /server economy</button>
+                        <button class="quick-chip" onclick="quickSend('/shards')">💎 /shards</button>
+                        <button class="quick-chip" onclick="quickSend('/tpaccept Fingoxenpro')">🤝 /tpaccept Fingoxenpro</button>
+                        <button class="quick-chip" onclick="quickSend('/tpaccept')">✅ /tpaccept</button>
+                        <button class="quick-chip" onclick="quickSend('/tpahere Fingoxenpro')">📍 /tpahere Fingoxenpro</button>
+                        <button class="quick-chip" onclick="quickSend('/home 1')">🏠 /home 1</button>
+                        <button class="quick-chip" onclick="quickSend('/spawn')">🗺 /spawn</button>
+                        <button class="quick-chip" onclick="quickSend('/balance')">💰 /balance</button>
+                        <button class="quick-chip" onclick="quickSend('/vote')">🗳 /vote</button>
+                        <button class="quick-chip" onclick="quickSend('/clan')">⚔️ /clan</button>
+                        <button class="quick-chip" onclick="quickSend('/kit')">📦 /kit</button>
+                        <button class="quick-chip" onclick="quickSend('/tpa Fingoxenpro')">👤 /tpa Fingoxenpro</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. TERMINAL LOGS VIEW -->
+        <div id="view-terminal" class="view">
+            <div class="terminal-container">
+                <div class="toolbar">
+                    <div class="filters">
+                        <span class="chip active" onclick="setFilter('all', this)">Barchasi</span>
+                        <span class="chip" onclick="setFilter('mineflayer', this)">Mineflayer 🎮</span>
+                        <span class="chip" onclick="setFilter('queue', this)">Navbat/Watchdog ⏳</span>
+                        <span class="chip" onclick="setFilter('keepalive', this)">KeepAlive ⚡️</span>
+                        <span class="chip" onclick="setFilter('error', this)">Xatolar ⚠️</span>
+                        <input type="text" id="log-search" class="search-box" placeholder="🔎 Loglarda qidiruv..." oninput="handleSearch(this.value)">
+                    </div>
+                    <div class="actions">
+                        <button class="tool-btn" onclick="downloadLogs()">💾 .txt Yuklash</button>
+                        <button class="tool-btn" onclick="copyLogs()">📋 Nusxa olish</button>
+                        <button class="tool-btn" onclick="clearScreen()">🧹 Tozalash</button>
+                        <button id="btn-autoscroll" class="tool-btn btn-toggle-on" onclick="toggleAutoScroll()">⬇️ Avto-skroll: ON</button>
+                        <button class="tool-btn" onclick="fetchLogs()">🔄</button>
+                    </div>
+                </div>
+                <div id="terminal-view"><div class="log-line log-system">Loglar yuklanmoqda...</div></div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div id="footer-count">Ko'rsatilmoqda: 0 ta qator (Oxirgi 2 soat)</div>
+        <div id="footer-uptime">Render Server: Onlayn</div>
+    </footer>
+
+    <script>
+        let allLogs = [];
+        let autoScroll = true;
+        let currentFilter = 'all';
+        let searchQuery = '';
+        let activeCaptchaBot = null;
+        let toastTimer = null;
+
+        function showToast(msg, duration = 3000) {
+            const toast = document.getElementById('toast-banner');
+            toast.innerText = msg;
+            toast.style.display = 'block';
+            if (toastTimer) clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                toast.style.display = 'none';
+            }, duration);
+        }
+
+        function switchTab(name) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            const tabBtn = document.getElementById('btn-tab-' + (name === 'terminal' ? 'terminal' : (name === 'chat' ? 'chat' : 'dash')));
+            if (tabBtn) tabBtn.classList.add('active');
+            const targetView = document.getElementById('view-' + name);
+            if (targetView) targetView.classList.add('active');
+
+            if (name === 'chat') {
+                const chatBox = document.getElementById("ingame-chat-box");
+                if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        }
+
+        function setFilter(name, el) {
+            currentFilter = name;
+            document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+            el.classList.add('active');
+            renderLogs();
+        }
+
+        function handleSearch(val) {
+            searchQuery = val.trim().toLowerCase();
+            renderLogs();
+        }
+
+        function toggleAutoScroll() {
+            autoScroll = !autoScroll;
+            const btn = document.getElementById("btn-autoscroll");
+            if (autoScroll) {
+                btn.className = "tool-btn btn-toggle-on";
+                btn.innerText = "⬇️ Avto-skroll: ON";
+                scrollToBottom();
+            } else {
+                btn.className = "tool-btn btn-toggle-off";
+                btn.innerText = "⬇️ Avto-skroll: OFF";
+            }
+        }
+
+        function scrollToBottom() {
+            const term = document.getElementById("terminal-view");
+            if (term) term.scrollTop = term.scrollHeight;
+        }
+
+        function clearScreen() {
+            document.getElementById("terminal-view").innerHTML = '<div class="log-line log-system">Terminal tozalandi.</div>';
+        }
+
+        function copyLogs() {
+            const txt = allLogs.map(l => '[' + l.time + '] ' + l.message).join('\\n');
+            navigator.clipboard.writeText(txt).then(() => { showToast("📋 Loglar nusxalandi!"); });
+        }
+
+        function downloadLogs() {
+            const txt = allLogs.map(l => '[' + l.time + '] ' + l.message).join('\\n');
+            const blob = new Blob([txt], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = 'mc_bot_logs_' + Date.now() + '.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function colorize(msg) {
+            if (msg.includes("[Mineflayer]")) return "log-mineflayer";
+            if (msg.includes("[KeepAlive]")) return "log-keepalive";
+            if (msg.includes("ERROR") || msg.includes("Xatolik") || msg.includes("Error") || msg.includes("KICK")) return "log-error";
+            if (msg.includes("Muvaffaqiyatli") || msg.includes("OK") || msg.includes("tayyor") || msg.includes("active")) return "log-success";
+            return "log-info";
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        function renderLogs() {
+            const term = document.getElementById("terminal-view");
+            if (!term) return;
+            if (!allLogs || allLogs.length === 0) {
+                term.innerHTML = '<div class="log-line log-system">Loglar kutilmoqda...</div>';
+                document.getElementById("footer-count").innerText = "Ko'rsatilmoqda: 0 ta qator";
+                return;
+            }
+
+            const filtered = allLogs.filter(function(l) {
+                const msg = l.message;
+                if (currentFilter === 'mineflayer' && !msg.includes('[Mineflayer]')) return false;
+                if (currentFilter === 'keepalive' && !msg.includes('[KeepAlive]')) return false;
+                if (currentFilter === 'queue' && !msg.includes('Navbat') && !msg.includes('Watchdog') && !msg.includes('queue')) return false;
+                if (currentFilter === 'error' && !msg.includes('ERROR') && !msg.includes('Xatolik') && !msg.includes('KICK')) return false;
+
+                if (searchQuery && !msg.toLowerCase().includes(searchQuery) && !l.time.includes(searchQuery)) {
+                    return false;
+                }
+                return true;
+            });
+
+            document.getElementById("footer-count").innerText = "Ko'rsatilmoqda: " + filtered.length + " / Jami: " + allLogs.length + " ta qator";
+
+            term.innerHTML = filtered.map(function(l) {
+                const cls = colorize(l.message);
+                return '<div class="log-line"><span class="log-time">' + l.time + '</span><span class="' + cls + '">' + escapeHtml(l.message) + '</span></div>';
+            }).join("");
+
+            if (autoScroll) scrollToBottom();
+        }
+
+        function renderInGameChat() {
+            const chatBox = document.getElementById("ingame-chat-box");
+            if (!chatBox) return;
+
+            const chatLogs = allLogs.filter(l => {
+                const m = l.message;
+                return m.includes('[CHAT]') || m.includes('[WHISPER]') || m.includes('[MSG]') ||
+                       m.includes('[AUTO-TPA]') || m.includes('[OWNER_CMD]') || m.includes('[ShardTracker]') ||
+                       m.includes('Shard') || m.includes('teleported');
+            });
+
+            if (chatLogs.length === 0) {
+                chatBox.innerHTML = '<div class="chat-msg-row"><span class="chat-msg-time">--:--:--</span><span class="chat-msg-author system">[Tizim]</span><span class="chat-msg-text">O\\'yin ichidagi xabarlar kutilmoqda...</span></div>';
+                return;
+            }
+
+            const atBottom = (chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight) < 40;
+
+            chatBox.innerHTML = chatLogs.slice(-150).map(l => {
+                const msg = l.message;
+                let author = '[Server]';
+                let authorCls = 'system';
+                let text = msg;
+
+                if (msg.includes('[CHAT]')) {
+                    const match = msg.match(/<([^>]+)>\s*(.*)/);
+                    if (match) {
+                        author = match[1];
+                        text = match[2];
+                        authorCls = author.toLowerCase().includes('fingoxen') ? 'owner' : (author.toLowerCase().includes('gotto') ? 'bot' : '');
+                    }
+                } else if (msg.includes('[AUTO-TPA]')) {
+                    author = '🤝 Auto-TPA';
+                    authorCls = 'owner';
+                    text = msg.replace(/^.*\[AUTO-TPA\]\s*/, '');
+                } else if (msg.includes('[OWNER_CMD]')) {
+                    author = '👑 Owner';
+                    authorCls = 'owner';
+                    text = msg.replace(/^.*\[OWNER_CMD\]\s*/, '');
+                } else if (msg.includes('[ShardTracker]') || msg.includes('Shard')) {
+                    author = '💎 Shards';
+                    authorCls = 'owner';
+                    text = msg.replace(/^.*\[ShardTracker\]\s*/, '');
+                }
+
+                let textCls = 'chat-msg-text';
+                if (text.includes('Shard') || text.includes('💎')) textCls += ' shard-reward';
+                if (text.includes('TPA') || text.includes('teleport')) textCls += ' tpa-alert';
+
+                return '<div class="chat-msg-row">' +
+                    '<span class="chat-msg-time">' + l.time + '</span>' +
+                    '<span class="chat-msg-author ' + authorCls + '">' + escapeHtml(author) + ':</span>' +
+                    '<span class="' + textCls + '">' + escapeHtml(text) + '</span>' +
+                    '</div>';
+            }).join('');
+
+            if (atBottom) {
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        }
+
+        function fetchLogs() {
+            fetch('/api/logs')
+                .then(r => r.json())
+                .then(data => {
+                    allLogs = data.logs || [];
+                    document.getElementById("footer-uptime").innerText = 'Server ish vaqti: ' + data.uptime + 's | Holat: ' + data.status;
+                    renderLogs();
+                    renderInGameChat();
+
+                    if (data.data) {
+                        const d = data.data;
+
+                        // 1. Shards Widget
+                        if (d.shards) {
+                            const formatted = d.shards.formatted_total || '6.1K';
+                            const exact = Number(d.shards.total || 6100).toLocaleString();
+                            const session = Number(d.shards.session || 0).toLocaleString();
+
+                            document.getElementById("dash-shards-total").innerText = formatted;
+                            document.getElementById("dash-shards-exact").innerText = exact;
+                            document.getElementById("dash-shards-session").innerText = session;
+                            document.getElementById("header-shards").innerText = formatted;
+                        }
+
+                        // 2. Bots & Subserver Status
+                        const botsList = d.bots || (d.bot ? [d.bot] : []);
+                        if (botsList.length > 0) {
+                            const primary = botsList[0];
+
+                            // Ping
+                            const pingVal = (primary.ping != null) ? primary.ping : '--';
+                            document.getElementById("header-ping").innerText = pingVal + ' ms';
+                            const dashPing = document.getElementById("dash-ping-badge");
+                            if (dashPing) dashPing.innerText = 'Ping: ' + pingVal + ' ms';
+
+                            // Subserver Badge & Queue Progress
+                            const subBadge = document.getElementById("dash-subserver-badge");
+                            const queueBox = document.getElementById("queue-box");
+                            const queueTimerVal = document.getElementById("queue-timer-val");
+                            const queueProgressBar = document.getElementById("queue-progress-bar");
+
+                            document.getElementById("dash-bot-status-text").innerText = primary.status || 'noma\'lum';
+                            document.getElementById("dash-target-loc").innerText = primary.target_location || 'afk';
+
+                            if (primary.is_queue_waiting || primary.status === 'in_queue') {
+                                const rem = primary.queue_remaining_seconds != null ? primary.queue_remaining_seconds : 80;
+                                subBadge.className = 'badge-status badge-status-yellow';
+                                subBadge.innerText = '🟡 LOBBY (Navbatda: ' + rem + 's qoldi)';
+
+                                if (queueBox) {
+                                    queueBox.style.display = 'block';
+                                    if (queueTimerVal) queueTimerVal.innerText = rem + 's qoldi';
+                                    if (queueProgressBar) {
+                                        const pct = Math.max(5, Math.min(100, Math.round(((80 - rem) / 80) * 100)));
+                                        queueProgressBar.style.width = pct + '%';
+                                    }
+                                }
+                            } else {
+                                if (queueBox) queueBox.style.display = 'none';
+
+                                if (primary.status === 'afk_active') {
+                                    subBadge.className = 'badge-status badge-status-green';
+                                    subBadge.innerText = '🟢 ECONOMY (AFK Hovuzida faol)';
+                                } else if (primary.status === 'in_economy') {
+                                    subBadge.className = 'badge-status badge-status-blue';
+                                    subBadge.innerText = '🔵 ECONOMY (Kutilyapti)';
+                                } else if (primary.status === 'logged_in') {
+                                    subBadge.className = 'badge-status badge-status-yellow';
+                                    subBadge.innerText = '🟡 LOBBY (Kirgan)';
+                                } else if (primary.status === 'connecting' || primary.status === 'reconnecting') {
+                                    subBadge.className = 'badge-status badge-status-yellow';
+                                    subBadge.innerText = '🟠 ULANMOQDA...';
+                                } else {
+                                    subBadge.className = 'badge-status badge-status-red';
+                                    subBadge.innerText = '🔴 OFFLINE / TO\'XTATILGAN';
+                                }
+                            }
+
+                            // Secondary Cards rendering
+                            const container = document.getElementById("bots-cards-container");
+                            if (container) {
+                                let cardsHtml = '';
+                                for (let i = 0; i < botsList.length; i++) {
+                                    const b = botsList[i];
+                                    const statusColor = b.status === 'afk_active' ? 'var(--green)' : (b.status === 'in_economy' || b.status === 'logged_in' ? 'var(--yellow)' : (b.status === 'connecting' || b.status === 'reconnecting' ? '#58a6ff' : 'var(--text-muted)'));
+                                    const statusLabel = b.status === 'afk_active' ? 'AFK Onlayn 🟢' : (b.status === 'in_queue' ? 'Lobby Navbatda 🟡' : (b.status === 'in_economy' ? 'Economy Serverda 🔵' : (b.status === 'logged_in' ? 'Lobby (Kirgan) 🟡' : (b.status || "Noma'lum"))));
+                                    const hp = b.health != null ? Math.round(b.health) : 20;
+                                    const food = b.food != null ? Math.round(b.food) : 20;
+                                    const hpW = Math.max(0, Math.min(100, (hp / 20) * 100));
+                                    const foodW = Math.max(0, Math.min(100, (food / 20) * 100));
+                                    const posStr = b.position ? ('X:' + b.position.x + ' Y:' + b.position.y + ' Z:' + b.position.z) : 'Kutilmoqda';
+
+                                    cardsHtml += '<div class="card">' +
+                                        '<div class="card-header">Bot #' + (i + 1) + ': ' + escapeHtml(b.username || 'Bot') + ' 🎮</div>' +
+                                        '<div class="stat-val" style="color: ' + statusColor + '; font-size: 18px;">' + statusLabel + '</div>' +
+                                        '<div class="stat-desc">Server: ' + escapeHtml(b.host || 'allaysmp.pro') + ' (' + escapeHtml(b.server || 'economy') + ')</div>' +
+                                        '<div class="stat-desc">Ish vaqti: ' + escapeHtml(b.uptime_text || '0s') + ' • Pozitsiya: ' + posStr + '</div>' +
+                                        '<div style="display: flex; gap: 10px; margin-top: 4px; font-size: 11px;">' +
+                                            '<div style="flex: 1;">' +
+                                                '<div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><span>❤️ HP</span><b style="color: #f85149;">' + hp + '/20</b></div>' +
+                                                '<div style="background: #0f141f; border-radius: 3px; height: 5px; overflow: hidden;"><div style="background: #f85149; height: 100%; width: ' + hpW + '%;"></div></div>' +
+                                            '</div>' +
+                                            '<div style="flex: 1;">' +
+                                                '<div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><span>🍗 Oziq</span><b style="color: #d29922;">' + food + '/20</b></div>' +
+                                                '<div style="background: #0f141f; border-radius: 3px; height: 5px; overflow: hidden;"><div style="background: #d29922; height: 100%; width: ' + foodW + '%;"></div></div>' +
+                                            '</div>' +
+                                        '</div>' +
+                                        (b.last_message ? '<div class="stat-desc" style="margin-top: 4px; font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="' + escapeHtml(b.last_message) + '">Oxirgi: ' + escapeHtml(b.last_message) + '</div>' : '') +
+                                    '</div>';
+                                }
+                                container.innerHTML = cardsHtml;
+                            }
+
+                            // Dynamic target dropdown sync
+                            const select = document.getElementById('chat-target');
+                            if (select) {
+                                const existingValues = Array.from(select.options).map(o => o.value);
+                                botsList.forEach(b => {
+                                    if (!existingValues.includes(b.username)) {
+                                        const opt = document.createElement('option');
+                                        opt.value = b.username;
+                                        opt.innerText = b.username;
+                                        select.appendChild(opt);
+                                    }
+                                });
+                            }
+
+                            // Captcha detection across all bots
+                            const pendingBot = botsList.find(b => b.captchaPending);
+                            const banner = document.getElementById('captcha-alert-banner');
+                            if (pendingBot) {
+                                activeCaptchaBot = pendingBot.username;
+                                const label = document.getElementById('captcha-bot-label');
+                                if (label) label.innerText = '(' + pendingBot.username + ')';
+                                if (banner.style.display !== 'block') {
+                                    banner.style.display = 'block';
+                                    document.getElementById('captcha-img').src = '/api/captcha.png?bot=' + encodeURIComponent(pendingBot.username) + '&t=' + Date.now();
+                                    setTimeout(() => { document.getElementById('captcha-input').focus(); }, 150);
+                                }
+                                triggerCaptchaAlert(pendingBot.username);
+                            } else {
+                                activeCaptchaBot = null;
+                                banner.style.display = 'none';
+                                clearCaptchaAlert();
+                            }
+                        }
+
+                        // 3. 4x Vote cards
+                        if (d.vote && d.vote.votes) {
+                            d.vote.votes.forEach(v => {
+                                const elTime = document.getElementById('vote-' + v.id + '-time');
+                                const elLink = document.getElementById('vote-' + v.id + '-link');
+                                if (elTime) elTime.innerText = v.remaining_text;
+                                if (elLink && v.url) elLink.href = v.url;
+                            });
+                        }
+                    }
+                })
+                .catch(err => { console.error("Logs fetch error:", err); });
+        }
+
+        function recoverAfkAction() {
+            showToast("🔄 Avto-AFK tiklash boshlandi: Lobby -> 80s Queue -> AFK...");
+            fetch('/api/bot/recover_afk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bot: 'all' })
+            }).then(r => r.json()).then(res => {
+                showToast(res.message || "AFK zanjiri ishga tushirildi!");
+                fetchLogs();
+            }).catch(e => {
+                showToast("Xatolik: " + e.message);
+            });
+        }
+
+        function checkShardsAction() {
+            showToast("💎 Serverga /shards buyrug'i yuborilmoqda...");
+            fetch('/api/shards/check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            }).then(r => r.json()).then(res => {
+                showToast(res.message || "/shards yuborildi!");
+                fetchLogs();
+            }).catch(e => {
+                showToast("Xatolik: " + e.message);
+            });
+        }
+
+        function submitCaptchaCode() {
+            const input = document.getElementById('captcha-input');
+            const code = input.value.trim();
+            if (!code) return;
+            const fb = document.getElementById('captcha-feedback');
+            fb.innerText = 'Yuborilmoqda...';
+            fetch('/api/captcha/solve', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: code, bot: activeCaptchaBot || null })
+            }).then(r => r.json()).then(d => {
+                fb.innerText = d.message || 'Yuborildi!';
+                input.value = '';
+                showToast(d.message || "Captcha kodi yuborildi!");
+                fetchLogs();
+            }).catch(e => {
+                fb.innerText = 'Xatolik: ' + e.message;
+            });
+        }
+
+        function recordVote(slotId) {
+            fetch('/api/vote/record', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ vote_id: slotId })
+            }).then(() => {
+                showToast("✅ Vote #" + slotId + " qayd etildi!");
+                fetchLogs();
+            });
+        }
+
+        function botAction(action) {
+            fetch('/api/bot/' + action, { method: 'POST' })
+                .then(r => r.json())
+                .then(res => {
+                    showToast(res.message || "Bajarildi");
+                    fetchLogs();
+                });
+        }
+
+        function sendChatMessage() {
+            const inp = document.getElementById("chat-msg");
+            const text = inp.value.trim();
+            if (!text) return;
+            const targetSelect = document.getElementById("chat-target");
+            const target = targetSelect ? targetSelect.value : 'all';
+            fetch('/api/bot/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text, bot: target })
+            }).then(r => r.json()).then(res => {
+                inp.value = '';
+                showToast(res.message || "Xabar yuborildi");
+                fetchLogs();
+            });
+        }
+
+        function quickSend(cmd) {
+            showToast("Buyruq: " + cmd);
+            const targetSelect = document.getElementById("chat-target");
+            const target = targetSelect ? targetSelect.value : 'all';
+            fetch('/api/bot/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: cmd, bot: target })
+            }).then(r => r.json()).then(res => {
+                showToast(res.message || "Yuborildi: " + cmd);
+                fetchLogs();
+            });
+        }
+
+        let captchaAlarmTimer = null;
+        function triggerCaptchaAlert(botName) {
+            if (!captchaAlarmTimer) {
+                try {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) {
+                        const ctx = new AudioCtx();
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.frequency.value = 880;
+                        gain.gain.value = 0.15;
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start();
+                        osc.stop(ctx.currentTime + 0.25);
+                    }
+                } catch (_) {}
+                captchaAlarmTimer = setInterval(function() {
+                    document.title = (document.title.indexOf('🔴') === -1)
+                        ? '🔴 CAPTCHA TALAB: ' + (botName || 'Bot')
+                        : '⚠️ Captcha Yeching! — Minecraft Bot';
+                }, 1000);
+            }
+        }
+
+        function clearCaptchaAlert() {
+            if (captchaAlarmTimer) {
+                clearInterval(captchaAlarmTimer);
+                captchaAlarmTimer = null;
+                document.title = 'Minecraft 24/7 AFK Bot — Render Dashboard';
+            }
+        }
+
+        fetchLogs();
+        setInterval(fetchLogs, 2500);
+    </script>
+</body>
+</html>

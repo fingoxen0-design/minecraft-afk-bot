@@ -1,6 +1,8 @@
 .env
 vote_state.json
 test_vote_state.json
+shard_state.json
+test_shard_state*.json
 users.json
 node_modules/
 __pycache__/
