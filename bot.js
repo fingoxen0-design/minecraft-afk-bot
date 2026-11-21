@@ -299,7 +299,8 @@ class SingleBotInstance {
     const raw = String(message || '').trim();
     if (!raw) return false;
 
-    // Velocity Queue blokirovkasi tekshiruvi
+    // Velocity Queue blokirovkasi tekshiruvi:
+    // Navbat paytida faqat majburiy (force) ichki tizim buyruqlari o'tishi mumkin.
     if (this.isQueueWaiting && !force) {
       const rem = this.commandQueue.getLockRemainingSec();
       console.log(`[Mineflayer:${this.username}] ⚠️ Navbat ketyapti (${rem}s qoldi). Velocity kick oldini olish uchun xabar bloklandi: "${raw}"`);
@@ -345,18 +346,26 @@ class SingleBotInstance {
   onQueueWaitComplete() {
     this.isQueueWaiting = false;
     this.commandQueue.setLock(false);
-    this.queueTimer = null;
-    console.log(`[Mineflayer:${this.username}] ✅ 80 soniyalik Velocity navbati tugadi. Buyruqlar qulfi ochildi.`);
+    if (this.queueTimer) {
+      this.sessionManager.clearTimeout(this.queueTimer);
+      this.queueTimer = null;
+    }
+    this.recoveryManager.stopEconomyVerification();
+    console.log(`[Mineflayer:${this.username}] ✅ 80 soniyalik Velocity navbati tugadi. Economy va AFK rejimiga o'tilmoqda...`);
 
-    if (this.currentServer === config.MC_SUBSERVER) {
+    this.currentServer = config.MC_SUBSERVER;
+    this.stateManager.setServerState(SERVER_STATES.ECONOMY);
+
+    if (this.targetLocation === 'afk') {
       this.stateManager.setBotState(BOT_STATES.ACTIVATING_AFK, 'queue_complete_economy');
       console.log(`[Mineflayer:${this.username}] Economy serverida /afk yuborilmoqda...`);
       this.safeChat('/afk', true);
       this.stateManager.setBotState(BOT_STATES.AFK_ACTIVE);
       this.isAfk = true;
+      this.stateManager.setAfkState(AFK_STATES.ACTIVE);
       this.afkManager.startMonitoring();
     } else {
-      console.log(`[Mineflayer:${this.username}] Navbat tugadi, lekin bot hali Economy'ga o'tmagan (${this.currentServer}). Tasdiqlash kutilmoqda...`);
+      console.log(`[Mineflayer:${this.username}] Bot ${this.targetLocation} rejimida, /afk yuborilmadi.`);
       this.stateManager.setBotState(BOT_STATES.VERIFYING_ECONOMY);
     }
   }
@@ -566,6 +575,12 @@ class SingleBotInstance {
       if (!clean) return;
 
       this.lastMessage = clean;
+
+      // 0. Navbat paytida Economy xabarlari kelishi (masalan, coinflip, shards, auction, balance)
+      if (this.isQueueWaiting && /coinflip|auction|ah|shard|balance|economy|market/i.test(clean)) {
+        console.log(`[Mineflayer:${this.username}] 🎯 Economy server xabarlari aniqlandi, navbat muddatidan oldin yakunlanmoqda.`);
+        this.onQueueWaitComplete();
+      }
 
       // 1. Shard Tracker
       if (this.supervisor && this.supervisor.shardTracker) {
@@ -851,7 +866,12 @@ class Minecraft247Bot {
       const normalized = normalizeCommand(text);
       if (!normalized) return { success: false, error: 'Yaroqsiz buyruq' };
 
-      const ok = primary.safeChat(normalized, true);
+      if (primary.isQueueWaiting) {
+        const rem = primary.commandQueue.getLockRemainingSec();
+        return { success: false, error: `Bot hozir Velocity navbatida (${rem}s qoldi). Kick bo'lmasligi uchun buyruq bloklandi!` };
+      }
+
+      const ok = primary.safeChat(normalized, false);
       return { success: ok, message: ok ? `Buyruq yuborildi: ${normalized}` : 'Buyruq bloklandi (navbatda)' };
     }
 
