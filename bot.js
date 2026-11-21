@@ -228,6 +228,12 @@ class SingleBotInstance {
       console.warn(`[Mineflayer:${this.username}] ⚠️ AFK hovuzida shard to'xtab qolgan, qayta /afk yuborilmoqda...`);
       this.safeChat('/afk', true);
     });
+    this.afkManager.on('requestShardCheck', () => {
+      if (this.isAfk && !this.commandQueue.isQueueLocked()) {
+        console.log(`[Mineflayer:${this.username}] Avtomatik Shard balansi yangilanmoqda (/shards)...`);
+        this.safeChat('/shards', true);
+      }
+    });
 
     // 3. Recovery Manager hodisalari
     this.recoveryManager.on('economyVerificationFailed', () => {

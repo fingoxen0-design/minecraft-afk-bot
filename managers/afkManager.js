@@ -44,6 +44,20 @@ class AfkManager extends EventEmitter {
     this.antiKickTimer = setInterval(() => {
       this.performGentleAntiKick();
     }, this.antiKickIntervalMs);
+
+    // Avtomatik har 5 daqiqada Shards balansini yangilash
+    this.shardCheckTimer = setInterval(() => {
+      if (this.isAfkActive) {
+        this.emit('requestShardCheck');
+      }
+    }, 5 * 60 * 1000);
+
+    // AFK boshlangandan 5 soniya o'tib dastlabki balansni yangilash
+    this.initialShardTimer = setTimeout(() => {
+      if (this.isAfkActive) {
+        this.emit('requestShardCheck');
+      }
+    }, 5000);
   }
 
   stopMonitoring() {
@@ -54,6 +68,14 @@ class AfkManager extends EventEmitter {
     if (this.antiKickTimer) {
       clearInterval(this.antiKickTimer);
       this.antiKickTimer = null;
+    }
+    if (this.shardCheckTimer) {
+      clearInterval(this.shardCheckTimer);
+      this.shardCheckTimer = null;
+    }
+    if (this.initialShardTimer) {
+      clearTimeout(this.initialShardTimer);
+      this.initialShardTimer = null;
     }
     this.isAfkActive = false;
   }

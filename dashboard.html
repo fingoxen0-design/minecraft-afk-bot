@@ -580,16 +580,33 @@
     <header>
         <div class="brand">
             <div class="title">🎮 Minecraft 24/7 AFK Bot (Gotto)</div>
-            <div class="live-badge"><span class="live-dot"></span> ONLAYN</div>
             <div class="live-badge gold"><span class="live-dot"></span> 💎 <span id="header-shards">6.1K</span></div>
             <div class="live-badge blue"><span class="live-dot"></span> <span id="header-ping">-- ms</span></div>
         </div>
         <div class="tabs">
-            <button id="btn-tab-dash" class="tab-btn active" onclick="switchTab('dashboard')">💎 Monitoring & AFK</button>
+            <button id="btn-tab-dash" class="tab-btn active" onclick="switchTab('dashboard')">💎 Monitoring</button>
             <button id="btn-tab-chat" class="tab-btn" onclick="switchTab('chat')">💬 O'yin Chati</button>
             <button id="btn-tab-terminal" class="tab-btn" onclick="switchTab('terminal')">📜 Tizim Loglari</button>
         </div>
     </header>
+    <script>
+        window.switchTab = function(name) {
+            try {
+                document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+                document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
+                var tabBtn = document.getElementById('btn-tab-' + (name === 'terminal' ? 'terminal' : (name === 'chat' ? 'chat' : 'dash')));
+                if (tabBtn) tabBtn.classList.add('active');
+                var targetView = document.getElementById('view-' + name);
+                if (targetView) targetView.classList.add('active');
+                if (name === 'chat') {
+                    var chatBox = document.getElementById('ingame-chat-box');
+                    if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
+                }
+            } catch (e) {
+                console.error('switchTab error:', e);
+            }
+        };
+    </script>
 
     <!-- LIVE CAPTCHA ALERT CARD -->
     <div id="captcha-alert-banner" style="display: none; background: #2b1117; border: 2px solid #f85149; border-radius: 8px; padding: 14px 18px; margin: 10px 18px; flex-shrink: 0;">
@@ -625,23 +642,23 @@
                     <div class="hero-card shard-card">
                         <div>
                             <div class="hero-header">
-                                <span class="hero-title">💎 Shards Monitoring</span>
-                                <span class="live-badge gold"><span class="live-dot"></span> ALLAY SMP</span>
+                                <span class="hero-title">💎 Shards Balansi</span>
+                                <span class="live-badge gold"><span class="live-dot"></span> Avtomatik</span>
                             </div>
                             <div class="hero-value-big gold" style="margin-top: 10px;">
                                 <span id="dash-shards-total">6.1K</span>
                                 <span style="font-size: 15px; color: var(--text-muted); font-weight: 500;">Shard</span>
                             </div>
                             <div class="hero-subtitle" style="margin-top: 6px;">
-                                Jami aniq: <b id="dash-shards-exact" style="color: #fff;">6,100</b> Shards
+                                Jami: <b id="dash-shards-exact" style="color: #fff;">6,100</b> Shards
                             </div>
                             <div class="hero-subtitle" style="color: var(--green); font-weight: 600; margin-top: 2px;">
-                                ⚡️ Ushbu sessiyada: +<span id="dash-shards-session">0</span> Shards (har 5 daqiqada +10)
+                                Sessiya: +<span id="dash-shards-session">0</span> Shards
                             </div>
                         </div>
                         <div style="margin-top: 10px;">
                             <button class="btn-tool-action" style="width: 100%;" onclick="checkShardsAction()">
-                                🔄 Serverdan Shard Balansini Tekshirish (/shards)
+                                🔄 Balansni yangilash
                             </button>
                         </div>
                     </div>
@@ -672,7 +689,7 @@
                                     <span id="queue-timer-val">80s qoldi</span>
                                 </div>
                                 <div class="progress-track"><div id="queue-progress-bar" class="progress-fill"></div></div>
-                                <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Kick xatosi oldini olish uchun buyruqlar bloklangan</div>
+                                <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Navbat tugashi kutilmoqda</div>
                             </div>
                         </div>
                         <div style="margin-top: 10px;">
@@ -686,22 +703,15 @@
                     <div class="hero-card action-card">
                         <div>
                             <div class="hero-header">
-                                <span class="hero-title">🔄 Avto-Tiklash Tizimi</span>
-                                <span class="live-badge"><span class="live-dot"></span> XAVFSIZ</span>
+                                <span class="hero-title">🔄 Bot Boshqaruvi</span>
                             </div>
-                            <div style="margin-top: 10px;">
+                            <div style="margin-top: 14px;">
                                 <button class="btn-hero-recover" onclick="recoverAfkAction()">
-                                    🔄 Bir bosishda AFK ga qaytarish
+                                    🔄 AFK ga qaytarish
                                 </button>
                             </div>
-                            <div class="hero-subtitle" style="margin-top: 12px; line-height: 1.5;">
-                                Bot adashsa (Practice/Lobby) yoki kick bo'lsa, avtomatik zanjirni ishga tushiradi:
-                                <div style="color: #58a6ff; font-weight: 600; margin-top: 4px;">
-                                    Lobby ➔ 80s Xavfsiz Navbat ➔ Economy ➔ /afk hovuzi
-                                </div>
-                            </div>
                         </div>
-                        <div style="display: flex; gap: 8px; margin-top: 10px;">
+                        <div style="display: flex; gap: 8px; margin-top: 14px;">
                             <button class="btn-tool-action" style="flex: 1;" onclick="botAction('start')">▶️ Start</button>
                             <button class="btn-tool-action" style="flex: 1;" onclick="botAction('stop')">⏹ Stop</button>
                         </div>
@@ -721,9 +731,8 @@
 
                     <div class="card">
                         <div class="card-header">Render Anti-Sleep ⚡️</div>
-                        <div class="stat-val" style="color: var(--yellow);">Uyg'oq (24/7)</div>
-                        <div class="stat-desc">Keep-alive pinger Render serverni uxlatmasdan uzluksiz ishlatadi</div>
-                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Interval: har 3 daqiqada /health ping</div>
+                        <div class="stat-val" style="color: var(--yellow);">Uyg'oq</div>
+                        <div class="stat-desc">Har 3 daqiqada /health ping</div>
                     </div>
 
                     <!-- 4x VOTE SLOTS -->
@@ -770,8 +779,7 @@
         <div id="view-chat" class="view">
             <div class="chat-container">
                 <div style="display: flex; justify-content: space-between; align-items: center; padding: 2px 4px;">
-                    <div style="font-size: 13px; font-weight: 700; color: #58a6ff;">💬 Minecraft Jonli Server Chati</div>
-                    <div style="font-size: 11px; color: var(--text-muted);">Faqat o'yin ichidagi xabarlar va hodisalar</div>
+                    <div style="font-size: 13px; font-weight: 700; color: #58a6ff;">💬 Minecraft Jonli Chati</div>
                 </div>
 
                 <div id="ingame-chat-box" class="chat-messages-box">
