@@ -144,6 +144,10 @@ class SingleBotInstance {
     this.queueDurationMs = 80000;
     this.queueTimer = null;
 
+    // Ping & Network State
+    this.measuredPing = 35;
+    this.startPingMeasurement();
+
     // Captcha & Safety State
     this.hasLoggedIn = false;
     this.isCaptchaPending = false;
@@ -242,6 +246,33 @@ class SingleBotInstance {
     });
   }
 
+  startPingMeasurement(intervalMs = 8000) {
+    const net = require('net');
+    const measure = () => {
+      const start = Date.now();
+      const s = net.connect({ host: config.MC_HOST, port: config.MC_PORT, timeout: 3500 }, () => {
+        this.measuredPing = Math.max(1, Date.now() - start);
+        s.destroy();
+      });
+      s.on('error', () => { s.destroy(); });
+      s.on('timeout', () => { s.destroy(); });
+    };
+    measure();
+    this.pingInterval = setInterval(measure, intervalMs);
+  }
+
+  getPing() {
+    if (this.bot) {
+      if (this.bot.player && typeof this.bot.player.ping === 'number' && this.bot.player.ping > 0) {
+        return this.bot.player.ping;
+      }
+      if (this.bot._client && typeof this.bot._client.latency === 'number' && this.bot._client.latency > 0) {
+        return Math.round(this.bot._client.latency);
+      }
+    }
+    return this.measuredPing || 35;
+  }
+
   getSummary() {
     const uptimeSec = this.startedAt && this.stateManager.botState !== BOT_STATES.STOPPED
       ? Math.floor((Date.now() - this.startedAt) / 1000)
@@ -254,6 +285,7 @@ class SingleBotInstance {
     return {
       username: this.username,
       status: this.status,
+      ping: this.getPing(),
       bot_state: fsmState.botState,
       server_state: fsmState.serverState,
       connection_state: fsmState.connectionState,
@@ -299,8 +331,7 @@ class SingleBotInstance {
     const raw = String(message || '').trim();
     if (!raw) return false;
 
-    // Velocity Queue blokirovkasi tekshiruvi:
-    // Navbat paytida faqat majburiy (force) ichki tizim buyruqlari o'tishi mumkin.
+    // Velocity Queue blokirovkasi tekshiruvi
     if (this.isQueueWaiting && !force) {
       const rem = this.commandQueue.getLockRemainingSec();
       console.log(`[Mineflayer:${this.username}] ⚠️ Navbat ketyapti (${rem}s qoldi). Velocity kick oldini olish uchun xabar bloklandi: "${raw}"`);
@@ -351,23 +382,21 @@ class SingleBotInstance {
       this.queueTimer = null;
     }
     this.recoveryManager.stopEconomyVerification();
-    console.log(`[Mineflayer:${this.username}] ✅ 80 soniyalik Velocity navbati tugadi. Economy va AFK rejimiga o'tilmoqda...`);
+    this.recoveryManager.confirmEconomySuccess();
+    console.log(`[Mineflayer:${this.username}] ✅ 80 soniyalik Velocity navbati tugadi. Buyruqlar qulfi ochildi.`);
 
     this.currentServer = config.MC_SUBSERVER;
     this.stateManager.setServerState(SERVER_STATES.ECONOMY);
+    this.stateManager.setBotState(BOT_STATES.ACTIVATING_AFK, 'queue_complete_economy');
+    this.recoveryManager.confirmEconomySuccess();
 
-    if (this.targetLocation === 'afk') {
-      this.stateManager.setBotState(BOT_STATES.ACTIVATING_AFK, 'queue_complete_economy');
-      console.log(`[Mineflayer:${this.username}] Economy serverida /afk yuborilmoqda...`);
+    this.sessionManager.setTimeout(() => {
+      console.log(`[Mineflayer:${this.username}] Economy serverida /afk faollashtirilmoqda...`);
       this.safeChat('/afk', true);
       this.stateManager.setBotState(BOT_STATES.AFK_ACTIVE);
       this.isAfk = true;
-      this.stateManager.setAfkState(AFK_STATES.ACTIVE);
       this.afkManager.startMonitoring();
-    } else {
-      console.log(`[Mineflayer:${this.username}] Bot ${this.targetLocation} rejimida, /afk yuborilmadi.`);
-      this.stateManager.setBotState(BOT_STATES.VERIFYING_ECONOMY);
-    }
+    }, 2500, this.sessionManager.getCurrentSessionId());
   }
 
   recoverAfk() {
@@ -559,6 +588,7 @@ class SingleBotInstance {
       if (!this.sessionManager.isSessionValid(boundSessionId)) return;
       if (username === bot.username) return;
       this.lastMessage = `${username}: ${message}`;
+      console.log(`[Mineflayer:${this.username}] [CHAT] <${username}> ${message}`);
       this.chatManager.parseMessage(`${username}: ${message}`, 'chat');
     });
 
@@ -566,6 +596,7 @@ class SingleBotInstance {
       if (!this.sessionManager.isSessionValid(boundSessionId)) return;
       if (username === bot.username) return;
       this.lastMessage = `${username} (whisper): ${message}`;
+      console.log(`[Mineflayer:${this.username}] [WHISPER] <${username}> ${message}`);
       this.chatManager.parseMessage(`[MSG] ${username} » ${this.username}: ${message}`, 'whisper');
     });
 
@@ -575,6 +606,11 @@ class SingleBotInstance {
       if (!clean) return;
 
       this.lastMessage = clean;
+
+      // In-game server/chat xabarlarini console'ga chiqarish (Web chat ko'rishi uchun)
+      if (!clean.startsWith('[Mineflayer:') && !clean.startsWith('[KeepAlive]') && !clean.startsWith('[StateManager]') && !clean.startsWith('=')) {
+        console.log(`[Mineflayer:${this.username}] [CHAT] ${clean}`);
+      }
 
       // 0. Navbat paytida Economy xabarlari kelishi (masalan, coinflip, shards, auction, balance)
       if (this.isQueueWaiting && /coinflip|auction|ah|shard|balance|economy|market/i.test(clean)) {
@@ -611,6 +647,13 @@ class SingleBotInstance {
     bot._client.on('packet', (data, meta) => {
       if (!this.sessionManager.isSessionValid(boundSessionId)) return;
       const name = meta ? meta.name : '';
+
+      if (['finish_configuration', 'game_join'].includes(name)) {
+        if (this.isQueueWaiting) {
+          console.log(`[Mineflayer:${this.username}] 🎯 Velocity subserver almashinuvi paketi (${name}) aniqlandi.`);
+          this.onQueueWaitComplete();
+        }
+      }
 
       if (['title', 'set_title_text', 'set_title_subtitle', 'set_action_bar_text'].includes(name)) {
         const text = extractCleanText(data);
@@ -727,6 +770,10 @@ class SingleBotInstance {
 
   stop() {
     this.manualStopped = true;
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
     this.sessionManager.clearAllTimers();
     this.cleanup();
     this.stateManager.setBotState(BOT_STATES.STOPPED, 'manual_stop');

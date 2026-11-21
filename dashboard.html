@@ -1002,12 +1002,21 @@
                 let text = msg;
 
                 if (msg.includes('[CHAT]')) {
-                    const match = msg.match(/<([^>]+)>\s*(.*)/);
+                    const content = msg.replace(/^.*\[CHAT\]\s*/, '').trim();
+                    const match = content.match(/^<([^>]+)>\s*(.*)/) || content.match(/^([A-Za-z0-9_]{3,16}):\s*(.*)/);
                     if (match) {
                         author = match[1];
                         text = match[2];
                         authorCls = author.toLowerCase().includes('fingoxen') ? 'owner' : (author.toLowerCase().includes('gotto') ? 'bot' : '');
+                    } else {
+                        author = '💬 Chat';
+                        text = content;
                     }
+                } else if (msg.includes('[WHISPER]')) {
+                    const content = msg.replace(/^.*\[WHISPER\]\s*/, '').trim();
+                    author = '🤫 Whisper';
+                    authorCls = 'owner';
+                    text = content;
                 } else if (msg.includes('[AUTO-TPA]')) {
                     author = '🤝 Auto-TPA';
                     authorCls = 'owner';
